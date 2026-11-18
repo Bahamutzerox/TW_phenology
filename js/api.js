@@ -200,7 +200,7 @@ export async function fetchGBIFSpecimens(taxonKey, onProgress, { taiwan = false 
         key: occ.key,
         type: 'specimen',
         month: occ.month,
-        day: 15,
+        day: occ.day || null,
         year: occ.year || null,
         lat: occ.decimalLatitude,
         lng: occ.decimalLongitude,

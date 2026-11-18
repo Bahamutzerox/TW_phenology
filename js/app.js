@@ -1,5 +1,5 @@
 import { searchTaxa, fetchINatObservations, matchGBIFTaxon, fetchGBIFSpecimens } from './api.js';
-import { renderTimeline } from './timeline.js';
+import { renderTimeline, renderMonthDetail } from './timeline.js';
 import { renderMap } from './map.js';
 import { saveSearch, listSearches, deleteSearch } from './storage.js';
 
@@ -34,7 +34,10 @@ const recordsList  = $('records-list');
 const savedList    = $('saved-list');
 const monthFilter  = $('month-filter');
 const typeFilter   = $('type-filter');
-const saveBar      = $('save-bar');
+const monthDetailWrap  = $('month-detail-wrap');
+const monthDetailLabel = $('month-detail-label');
+const monthDetailChart = $('month-detail-chart');
+const saveBar          = $('save-bar');
 const saveBtn      = $('save-btn');
 const saveStatus   = $('save-status');
 const dashboard    = $('dashboard');
@@ -164,6 +167,9 @@ function refreshUI() {
     `<span class="stat-chip specimen">標本 ${state.gbifRecords.length} 筆</span>`,
   ].join('');
 
+  // Hide month detail on new search
+  monthDetailWrap.hidden = true;
+
   // Timeline
   renderTimeline(timelineEl, state.inatRecords, state.gbifRecords, handleTimelineClick, { bandwidth: KDE_BANDWIDTH });
 
@@ -183,13 +189,22 @@ function refreshUI() {
 }
 
 // ── Timeline click handler ────────────────────────────────────────────────────
+const MONTH_ZH = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+
 function handleTimelineClick(month) {
   monthFilter.value  = String(month);
   typeFilter.value   = 'all';
   state.recordOffset = 0;
   renderRecordsList();
-  // Scroll to records panel
-  document.querySelector('.records-panel')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+  // Month detail Manhattan plot
+  const inatFil = state.inatRecords.filter(r => r.month === month);
+  const gbifFil = state.gbifRecords.filter(r => r.month === month);
+  monthDetailLabel.textContent =
+    `${MONTH_ZH[month - 1]}  ·  iNat ${inatFil.length} 筆  /  GBIF ${gbifFil.length} 筆`;
+  renderMonthDetail(monthDetailChart, state.inatRecords, state.gbifRecords, month);
+  monthDetailWrap.hidden = false;
+  monthDetailWrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 // ── Records ───────────────────────────────────────────────────────────────────
@@ -383,7 +398,11 @@ searchBtn.addEventListener('click', () => {
 });
 document.addEventListener('click', e => { if (!e.target.closest('.search-box')) hideAC(); });
 
-monthFilter.addEventListener('change', () => { state.recordOffset = 0; renderRecordsList(); });
+monthFilter.addEventListener('change', () => {
+  state.recordOffset = 0;
+  renderRecordsList();
+  if (monthFilter.value === '0') monthDetailWrap.hidden = true;
+});
 typeFilter.addEventListener('change',  () => {
   state.recordOffset = 0;
   renderRecordsList();
@@ -411,6 +430,8 @@ savedBtn.addEventListener('click', () => {
   if (opening) renderSavedList();
 });
 
+$('month-detail-close').addEventListener('click', () => { monthDetailWrap.hidden = true; });
+
 savedCloseBtn.addEventListener('click', () => {
   savedPanel.hidden = true;
   savedBtn.classList.remove('active');
@@ -418,5 +439,6 @@ savedCloseBtn.addEventListener('click', () => {
 
 // ── PWA ───────────────────────────────────────────────────────────────────────
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/sw.js').catch(() => {});
+  const swUrl = new URL('../sw.js', import.meta.url).href;
+  navigator.serviceWorker.register(swUrl).catch(() => {});
 }

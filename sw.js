@@ -1,16 +1,15 @@
-const CACHE = 'flowering-time-v9';
+const CACHE = 'flowering-time-v10';
 
-const BASE = '/TW_phenology';
 const PRECACHE = [
-  BASE + '/',
-  BASE + '/index.html',
-  BASE + '/css/style.css',
-  BASE + '/js/app.js',
-  BASE + '/js/api.js',
-  BASE + '/js/timeline.js',
-  BASE + '/js/map.js',
-  BASE + '/js/storage.js',
-  BASE + '/manifest.json',
+  './',
+  './index.html',
+  './css/style.css',
+  './js/app.js',
+  './js/api.js',
+  './js/timeline.js',
+  './js/map.js',
+  './js/storage.js',
+  './manifest.json',
 ];
 
 self.addEventListener('install', e => {
@@ -46,7 +45,7 @@ self.addEventListener('fetch', e => {
         }
         return res;
       }).catch(() => {
-        if (e.request.mode === 'navigate') return caches.match('/index.html');
+        if (e.request.mode === 'navigate') return caches.match(new URL('./index.html', self.location.href).href);
       });
     })
   );

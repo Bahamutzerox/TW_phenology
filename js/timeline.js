@@ -178,3 +178,96 @@ export function renderTimeline(container, inatRecords, gbifRecords, onMonthClick
 
   container.appendChild(svg);
 }
+
+const MONTH_ZH_D = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+const DAYS_IN_MONTH = [31,28,31,30,31,30,31,31,30,31,30,31];
+
+export function renderMonthDetail(container, inatRecords, gbifRecords, month) {
+  const dim = DAYS_IN_MONTH[month - 1];
+
+  const inatFil = inatRecords.filter(r => r.month === month);
+  const gbifFil = gbifRecords.filter(r => r.month === month && r.day != null);
+
+  const inatByDay = new Array(dim + 2).fill(0);
+  const gbifByDay = new Array(dim + 2).fill(0);
+  for (const r of inatFil) { const d = r.day; if (d >= 1 && d <= dim) inatByDay[d]++; }
+  for (const r of gbifFil) { if (r.day >= 1 && r.day <= dim) gbifByDay[r.day]++; }
+
+  const maxCount = Math.max(...inatByDay.slice(1, dim + 1), ...gbifByDay.slice(1, dim + 1), 1);
+
+  const W = 760, H = 130;
+  const PAD = { top: 20, right: 15, bottom: 28, left: 32 };
+  const chartW = W - PAD.left - PAD.right;
+  const chartH = H - PAD.top - PAD.bottom;
+  const xStep  = chartW / dim;
+  const xPos   = day   => PAD.left + (day - 0.5) * xStep;
+  const yPos   = count => PAD.top + chartH * (1 - count / maxCount);
+  const baseY  = PAD.top + chartH;
+
+  const ns  = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.setAttribute('width', '100%');
+  svg.style.display = 'block';
+
+  function el(tag, attrs) {
+    const e = document.createElementNS(ns, tag);
+    for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+    return e;
+  }
+
+  // Y-axis grid lines
+  const tickStep = Math.max(1, Math.ceil(maxCount / 4));
+  for (let t = tickStep; t <= maxCount; t += tickStep) {
+    const y = yPos(t);
+    svg.appendChild(el('line', { x1: PAD.left, y1: y, x2: PAD.left + chartW, y2: y, stroke: '#eee', 'stroke-width': '1' }));
+    const lbl = document.createElementNS(ns, 'text');
+    lbl.setAttribute('x', PAD.left - 5); lbl.setAttribute('y', y + 3.5);
+    lbl.setAttribute('text-anchor', 'end'); lbl.setAttribute('font-size', '10'); lbl.setAttribute('fill', '#bbb');
+    lbl.textContent = t;
+    svg.appendChild(lbl);
+  }
+
+  // Stems + dots (Manhattan plot)
+  const OFF = xStep > 10 ? 2.5 : 1;
+  for (let d = 1; d <= dim; d++) {
+    const x = xPos(d);
+    if (inatByDay[d]) {
+      const y = yPos(inatByDay[d]);
+      const g = document.createElementNS(ns, 'g');
+      g.appendChild(el('line', { x1: x - OFF, y1: baseY, x2: x - OFF, y2: y + 3, stroke: '#52b788', 'stroke-width': '2' }));
+      const dot = el('circle', { cx: x - OFF, cy: y, r: '3.5', fill: '#52b788' });
+      const title = document.createElementNS(ns, 'title');
+      title.textContent = `${d}日 iNat: ${inatByDay[d]} 筆`;
+      dot.appendChild(title);
+      g.appendChild(dot);
+      svg.appendChild(g);
+    }
+    if (gbifByDay[d]) {
+      const y = yPos(gbifByDay[d]);
+      const g = document.createElementNS(ns, 'g');
+      g.appendChild(el('line', { x1: x + OFF, y1: baseY, x2: x + OFF, y2: y + 3, stroke: '#4361ee', 'stroke-width': '2' }));
+      const dot = el('circle', { cx: x + OFF, cy: y, r: '3.5', fill: '#4361ee' });
+      const title = document.createElementNS(ns, 'title');
+      title.textContent = `${d}日 GBIF: ${gbifByDay[d]} 筆`;
+      dot.appendChild(title);
+      g.appendChild(dot);
+      svg.appendChild(g);
+    }
+  }
+
+  // Baseline
+  svg.appendChild(el('line', { x1: PAD.left, y1: baseY, x2: PAD.left + chartW, y2: baseY, stroke: '#ccc', 'stroke-width': '1' }));
+
+  // X-axis labels (every 5 days)
+  for (let d = 1; d <= dim; d += 5) {
+    const lbl = document.createElementNS(ns, 'text');
+    lbl.setAttribute('x', xPos(d)); lbl.setAttribute('y', baseY + 14);
+    lbl.setAttribute('text-anchor', 'middle'); lbl.setAttribute('font-size', '10'); lbl.setAttribute('fill', '#aaa');
+    lbl.textContent = `${d}`;
+    svg.appendChild(lbl);
+  }
+
+  container.innerHTML = '';
+  container.appendChild(svg);
+}

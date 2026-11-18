@@ -358,6 +358,41 @@ body {
   padding: 3px 0 8px;
 }
 
+/* ── Month detail (Manhattan plot) ───────────────────────────────────── */
+.month-detail-wrap {
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+  animation: fadeIn .2s ease;
+}
+@keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+
+.month-detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px 4px;
+}
+.month-detail-label {
+  font-size: .82rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: .01em;
+}
+.month-detail-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: .95rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+  line-height: 1;
+}
+.month-detail-close:hover { background: var(--border); color: var(--text); }
+.month-detail-chart {
+  padding: 0 8px 10px;
+}
+
 /* ── Map ──────────────────────────────────────────────────────────────── */
 .map-container {
   height: 440px;
