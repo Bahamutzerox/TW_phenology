@@ -112,6 +112,7 @@ export function renderTimeline(container, inatRecords, gbifRecords, onMonthClick
       stroke: '#4361ee',
       'stroke-width': '1.5',
       'stroke-linejoin': 'round',
+      'pointer-events': 'none',
     });
     svg.appendChild(path);
   }
@@ -123,6 +124,7 @@ export function renderTimeline(container, inatRecords, gbifRecords, onMonthClick
       stroke: '#52b788',
       'stroke-width': '1.5',
       'stroke-linejoin': 'round',
+      'pointer-events': 'none',
     });
     svg.appendChild(path);
   }
@@ -136,6 +138,7 @@ export function renderTimeline(container, inatRecords, gbifRecords, onMonthClick
       'stroke-width': '2',
       'stroke-linejoin': 'round',
       'stroke-dasharray': '5,3',
+      'pointer-events': 'none',
     });
     svg.appendChild(compPath);
   }
