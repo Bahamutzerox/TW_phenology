@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#2d6a4f">
+  <meta name="description" content="快速查詢植物開花、結果時間與分布，資料來自 iNaturalist 與 GBIF 標本">
+  <title>植物花果期查詢</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- ── Header ───────────────────────────────────────────────────────── -->
+  <header class="app-header">
+    <div class="brand">花果期</div>
+
+    <div class="search-wrap">
+      <div class="search-box">
+        <input type="text" id="search-input" placeholder="輸入植物學名或中文名…" autocomplete="off" spellcheck="false">
+        <button id="search-btn">搜尋</button>
+        <ul id="autocomplete-list" hidden></ul>
+      </div>
+      <div class="source-toggles">
+        <label><input type="checkbox" id="toggle-inat" checked> iNaturalist</label>
+        <label><input type="checkbox" id="toggle-gbif" checked> GBIF 標本</label>
+        <label><input type="checkbox" id="toggle-taiwan" checked> 僅台灣</label>
+      </div>
+    </div>
+
+    <button id="saved-btn" class="saved-btn">已儲存</button>
+  </header>
+
+  <!-- ── Progress ─────────────────────────────────────────────────────── -->
+  <div id="progress-section" class="progress-section" hidden>
+    <div class="progress-bar"><div id="progress-fill" class="progress-fill"></div></div>
+    <p id="progress-text">載入中…</p>
+  </div>
+
+  <!-- ── Intro (before first search) ──────────────────────────────────── -->
+  <div id="intro-state" class="intro-state">
+    <div class="intro-content">
+      <h2>輸入植物名稱開始查詢</h2>
+      <p>支援學名或中文名，整合 iNaturalist 觀察記錄與 GBIF 標本資料</p>
+    </div>
+  </div>
+
+  <!-- ── Dashboard ────────────────────────────────────────────────────── -->
+  <div id="dashboard" class="dashboard" hidden>
+
+    <!-- Taxon bar -->
+    <div class="taxon-bar">
+      <img id="taxon-photo" src="" alt="" hidden>
+      <div class="taxon-names">
+        <h2 id="taxon-scientific"></h2>
+        <p id="taxon-common"></p>
+      </div>
+      <div id="stats-row" class="stats-row"></div>
+      <div id="save-bar" class="save-bar" hidden>
+        <button id="save-btn">儲存</button>
+        <span id="save-status"></span>
+      </div>
+    </div>
+
+    <!-- Main grid: left (timeline + records) | right (map) -->
+    <div class="dashboard-grid">
+
+      <div class="col-left">
+
+        <!-- Timeline panel -->
+        <div class="panel timeline-panel">
+          <div class="panel-header">
+            <span class="panel-title">觀察密度時間軸</span>
+            <div class="panel-controls">
+              <select id="month-filter">
+                <option value="0">全部月份</option>
+                <option value="1">1月</option><option value="2">2月</option>
+                <option value="3">3月</option><option value="4">4月</option>
+                <option value="5">5月</option><option value="6">6月</option>
+                <option value="7">7月</option><option value="8">8月</option>
+                <option value="9">9月</option><option value="10">10月</option>
+                <option value="11">11月</option><option value="12">12月</option>
+              </select>
+              <select id="type-filter">
+                <option value="all">全部來源</option>
+                <option value="inat">iNaturalist</option>
+                <option value="gbif">GBIF 標本</option>
+              </select>
+            </div>
+          </div>
+          <div id="timeline-container" class="timeline-container"></div>
+          <p class="timeline-hint">點擊月份區域可過濾下方記錄</p>
+        </div>
+
+        <!-- Records panel -->
+        <div class="panel records-panel">
+          <div class="panel-header">
+            <span class="panel-title">記錄</span>
+            <div class="view-toggle">
+              <button class="view-btn active" data-view="grid" title="網格">⊞</button>
+              <button class="view-btn" data-view="list" title="列表">☰</button>
+            </div>
+          </div>
+          <div id="records-list" class="records-list"></div>
+        </div>
+
+      </div><!-- col-left -->
+
+      <!-- Map panel (sticky) -->
+      <div class="col-right">
+        <div class="panel map-panel">
+          <div class="panel-header">
+            <span class="panel-title">分布地圖</span>
+            <div class="map-legend">
+              <span class="legend-dot inat"></span>iNat
+              <span class="legend-dot gbif"></span>GBIF
+            </div>
+          </div>
+          <div id="map-container" class="map-container"></div>
+        </div>
+      </div>
+
+    </div><!-- dashboard-grid -->
+  </div><!-- dashboard -->
+
+  <!-- ── Saved panel (drawer) ──────────────────────────────────────────── -->
+  <div id="saved-panel" class="saved-panel" hidden>
+    <div class="saved-panel-header">
+      <h3>已儲存的查詢</h3>
+      <button id="saved-close-btn">✕</button>
+    </div>
+    <div id="saved-list" class="saved-list"></div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
