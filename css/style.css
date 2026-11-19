@@ -762,6 +762,9 @@ body {
   cursor: pointer;
 }
 .memo-close:hover { background: #edf3ef; }
+.memo-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.backup-status { font-size: .74rem; color: var(--text-muted); margin-right: 4px; }
+.backup-status.warn { color: #b8700f; }
 
 .memo-toolbar {
   display: flex;

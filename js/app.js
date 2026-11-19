@@ -5,6 +5,7 @@ import { saveSearch, listSearches, deleteSearch, listAnnotations } from './stora
 import { normalizeInatRecords, groupByTaxon, monthlyProfile, renderMemo, countInMonth } from './memo.js';
 import { PHENO, effectivePheno, hasPheno } from './pheno.js';
 import { openAnnotator } from './annotate.js';
+import { exportBackup, importBackup } from './backup.js';
 
 const RECORDS_PER_PAGE = 60;
 const KDE_BANDWIDTH    = 10;
@@ -413,6 +414,7 @@ function openMemo() {
   dashboard.hidden  = true;
   memoView.hidden   = false;
   savedBtn.classList.add('active');
+  showBackupStatus();
   loadMemo();
 }
 
@@ -575,9 +577,58 @@ memoCloseBtn.addEventListener('click', closeMemo);
 
 $('month-detail-close').addEventListener('click', hideMonthDetail);
 
-listAnnotations()
-  .then(list => { for (const a of list) state.annotations.set(a.key, a.labels); })
-  .catch(err => console.warn('Could not load annotations:', err));
+async function reloadAnnotations() {
+  try {
+    const list = await listAnnotations();
+    state.annotations.clear();
+    for (const a of list) state.annotations.set(a.key, a.labels);
+  } catch (err) {
+    console.warn('Could not load annotations:', err);
+  }
+}
+reloadAnnotations();
+
+// ── Backup ────────────────────────────────────────────────────────────────────
+const LAST_EXPORT_KEY = 'tw-phenology:last-export';
+const backupStatus = $('backup-status');
+const importFile   = $('import-file');
+
+function showBackupStatus() {
+  let last = null;
+  try { last = localStorage.getItem(LAST_EXPORT_KEY); } catch {}
+  backupStatus.classList.toggle('warn', !last);
+  backupStatus.textContent = last
+    ? `上次匯出 ${new Date(last).toLocaleDateString('zh-TW')}`
+    : '尚未匯出備份';
+}
+
+$('export-btn').addEventListener('click', async () => {
+  try {
+    const r = await exportBackup();
+    if (!r) return;
+    try { localStorage.setItem(LAST_EXPORT_KEY, new Date().toISOString()); } catch {}
+    showBackupStatus();
+  } catch (err) {
+    console.error(err);
+    alert('匯出失敗：' + err.message);
+  }
+});
+
+$('import-btn').addEventListener('click', () => importFile.click());
+importFile.addEventListener('change', async () => {
+  const file = importFile.files[0];
+  importFile.value = '';
+  if (!file) return;
+  try {
+    const r = await importBackup(file);
+    await reloadAnnotations();
+    await loadMemo();
+    if (state.currentTaxon) { drawTimeline(); drawMonthDetail(); renderRecordsList(); }
+    alert(`匯入完成\n新增物種 ${r.added} 種、更新 ${r.updated} 種、本機已是最新 ${r.skipped} 種\n匯入或更新標注 ${r.annotations} 筆`);
+  } catch (err) {
+    alert('匯入失敗：' + err.message);
+  }
+});
 
 // ── PWA ───────────────────────────────────────────────────────────────────────
 if ('serviceWorker' in navigator) {

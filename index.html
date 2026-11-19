@@ -143,7 +143,13 @@
         <h2>採集備忘錄</h2>
         <p id="memo-count" class="memo-count"></p>
       </div>
-      <button id="memo-close-btn" class="memo-close">返回</button>
+      <div class="memo-actions">
+        <span id="backup-status" class="backup-status"></span>
+        <button id="export-btn" class="memo-close">匯出</button>
+        <button id="import-btn" class="memo-close">匯入</button>
+        <input id="import-file" type="file" accept="application/json,.json" hidden>
+        <button id="memo-close-btn" class="memo-close">返回</button>
+      </div>
     </div>
     <div class="memo-toolbar">
       <span class="memo-toolbar-label">顯示</span>

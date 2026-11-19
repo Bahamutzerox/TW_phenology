@@ -51,7 +51,7 @@ export function listAnnotations() {
 }
 
 export function putAnnotation(ann) {
-  return run(ANN_STORE, 'readwrite', s => s.put({ ...ann, updated: new Date().toISOString() }));
+  return run(ANN_STORE, 'readwrite', s => s.put({ updated: new Date().toISOString(), ...ann }));
 }
 
 export function deleteAnnotation(key) {
