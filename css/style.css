@@ -168,6 +168,34 @@ body {
 .saved-btn:hover  { background: rgba(255,255,255,.28); }
 .saved-btn.active { background: rgba(255,255,255,.35); font-weight: 600; }
 
+.sync-btn { display: inline-flex; align-items: center; gap: 6px; }
+.sync-btn::before {
+  content: '';
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: rgba(255,255,255,.55);
+}
+.sync-btn.s-ok::before      { background: #8ee0b2; }
+.sync-btn.s-pending::before { background: #f4c35a; }
+.sync-btn.s-error::before   { background: #ff8a7a; }
+.sync-btn.s-syncing::before { background: #fff; animation: pulse 1s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .25; } }
+
+.sync-panel {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.sync-title { font-size: .8rem; font-weight: 650; }
+.sync-info  { font-size: .78rem; color: var(--text-muted); flex: 1; min-width: 180px; }
+.sync-info .sync-error { color: #c0392b; }
+
 /* ── Progress ─────────────────────────────────────────────────────────── */
 .progress-section {
   padding: 10px 20px 6px;
@@ -931,6 +959,7 @@ body {
   .search-box  { flex-basis: 100%; }
   .source-toggles { gap: 12px; padding: 0 2px 2px; }
   .saved-btn   { order: 1; margin-left: auto; }
+  .sync-btn:not([hidden]) + .saved-btn { margin-left: 0; }
 
   .dashboard { padding: 10px 10px 20px; }
   /* Flatten both columns so panels can be reordered: notes first for field use */

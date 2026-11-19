@@ -1,4 +1,4 @@
-const CACHE = 'flowering-time-v14';
+const CACHE = 'flowering-time-v15';
 
 const PRECACHE = [
   './',
@@ -13,6 +13,8 @@ const PRECACHE = [
   './js/pheno.js',
   './js/annotate.js',
   './js/backup.js',
+  './js/sync.js',
+  './js/config.js',
   './manifest.json',
 ];
 
@@ -35,8 +37,9 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   const { hostname } = new URL(e.request.url);
 
-  // Never cache API calls
-  if (hostname.includes('api.inaturalist.org') || hostname.includes('api.gbif.org')) return;
+  // Never cache API calls, Google sign-in or Drive sync
+  if (e.request.method !== 'GET') return;
+  if (/(^|\.)(api\.inaturalist\.org|api\.gbif\.org|googleapis\.com|accounts\.google\.com|gstatic\.com)$/.test(hostname)) return;
 
   // Cache-first for everything else (static + CDN)
   e.respondWith(

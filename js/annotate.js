@@ -1,5 +1,5 @@
 import { PHENO, recordKey, effectivePheno } from './pheno.js';
-import { putAnnotation, deleteAnnotation } from './storage.js';
+import { putAnnotation, deleteAnnotation, markDeleted } from './storage.js';
 
 const CHOICES = [
   { key: '1', labels: ['flower'],          text: '花' },
@@ -203,6 +203,7 @@ export function openAnnotator({ records, annotations, taxonName, onlyMonth = 0, 
     changed = true;
     show();
     await deleteAnnotation(key);
+    await markDeleted('annotation', key);
   }
 
   function onKey(e) {

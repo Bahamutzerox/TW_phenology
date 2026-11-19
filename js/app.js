@@ -1,11 +1,15 @@
 import { searchTaxa, fetchINatObservations, matchGBIFTaxon, fetchGBIFSpecimens } from './api.js';
 import { renderTimeline, renderMonthDetail } from './timeline.js';
 import { renderMap } from './map.js';
-import { saveSearch, listSearches, deleteSearch, listAnnotations, listNotes, putNote, deleteNote, noteKey } from './storage.js';
+import {
+  saveSearch, listSearches, deleteSearch, listAnnotations, listNotes, putNote, deleteNote,
+  noteKey, taxonKey, markDeleted,
+} from './storage.js';
 import { normalizeInatRecords, groupByTaxon, monthlyProfile, renderMemo, countInMonth } from './memo.js';
 import { PHENO, effectivePheno, hasPheno } from './pheno.js';
 import { openAnnotator } from './annotate.js';
 import { exportBackup, importBackup } from './backup.js';
+import { initSync } from './sync.js';
 
 const RECORDS_PER_PAGE = 60;
 const KDE_BANDWIDTH    = 10;
@@ -499,6 +503,7 @@ function drawMemo() {
     onDelete: async (entry, ids) => {
       if (!confirm(`從備忘錄刪除 ${entry.taxon_name}？`)) return;
       for (const id of ids) await deleteSearch(id);
+      await markDeleted('search', taxonKey(entry.taxon_name));
       loadMemo();
     },
   });
@@ -661,6 +666,7 @@ async function saveNote() {
     if (!text && !target) {
       state.notes.delete(key);
       await deleteNote(key);
+      await markDeleted('note', key);
       noteStatus.textContent = '';
       return;
     }
@@ -730,11 +736,76 @@ importFile.addEventListener('change', async () => {
     if (state.currentTaxon) showNoteEditor();
     await loadMemo();
     if (state.currentTaxon) { drawTimeline(); drawMonthDetail(); renderRecordsList(); }
-    alert(`匯入完成\n新增物種 ${r.added} 種、更新 ${r.updated} 種、本機已是最新 ${r.skipped} 種\n匯入或更新標注 ${r.annotations} 筆、筆記 ${r.notes} 則`);
+    alert(`匯入完成\n新增物種 ${r.added} 種、更新 ${r.updated} 種、本機已是最新 ${r.skipped} 種\n匯入或更新標注 ${r.annotations} 筆、筆記 ${r.notes} 則${r.deleted ? `\n依匯入檔的刪除紀錄移除 ${r.deleted} 項` : ''}`);
   } catch (err) {
     alert('匯入失敗：' + err.message);
   }
 });
+
+// ── Google Drive sync ─────────────────────────────────────────────────────────
+async function refreshAfterMerge() {
+  await reloadAnnotations();
+  await reloadNotes();
+  if (!memoView.hidden) await loadMemo();
+  if (state.currentTaxon) {
+    drawTimeline();
+    drawMonthDetail();
+    renderRecordsList();
+    // Don't clobber a note the user is typing
+    if (!noteTimer && document.activeElement !== noteText) showNoteEditor();
+  }
+}
+
+function fmtSyncTime(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const sameDay = d.toDateString() === new Date().toDateString();
+  return sameDay
+    ? d.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })
+    : d.toLocaleDateString('zh-TW');
+}
+
+const sync = initSync({ onMerged: refreshAfterMerge });
+if (sync) {
+  const syncBtn     = $('sync-btn');
+  const syncInfo    = $('sync-info');
+  const syncNowBtn  = $('sync-now-btn');
+  const signOutBtn  = $('sync-signout-btn');
+  syncBtn.hidden = false;
+  $('sync-panel').hidden = false;
+
+  sync.subscribe(s => {
+    const pendingChanges = s.dirty && s.state !== 'syncing';
+    const [label, cls] =
+      s.state === 'syncing'   ? ['同步中…', 's-syncing']
+      : s.state === 'error'   ? ['同步失敗', 's-error']
+      : s.state === 'signed-out' ? ['同步', '']
+      : s.state === 'need-auth'  ? [pendingChanges ? '待同步' : '點此同步', 's-pending']
+      : pendingChanges ? ['待同步', 's-pending'] : ['已同步', 's-ok'];
+    syncBtn.textContent = label;
+    syncBtn.className = `saved-btn sync-btn ${cls}`;
+    syncBtn.title = s.account ? `Google 帳號：${s.account.email}` : '登入 Google 以在裝置間同步';
+
+    syncInfo.textContent = s.account
+      ? `${s.account.email}${s.lastSync ? ` · 上次同步 ${fmtSyncTime(s.lastSync)}` : ''}`
+      : '登入 Google 後，備忘錄、花果標注與筆記會在你的各個裝置之間同步。資料存在你自己的雲端硬碟。';
+    if (s.state === 'error' && s.error) {
+      const e = document.createElement('span');
+      e.className = 'sync-error';
+      e.textContent = `  ${s.error}`;
+      syncInfo.appendChild(e);
+    }
+    syncNowBtn.textContent = s.account ? '立即同步' : '登入 Google 並同步';
+    syncNowBtn.disabled = s.state === 'syncing';
+    signOutBtn.hidden = !s.account;
+  });
+
+  syncBtn.addEventListener('click', () => { flushNote(); sync.sync(); });
+  syncNowBtn.addEventListener('click', () => { flushNote(); sync.sync(); });
+  signOutBtn.addEventListener('click', () => {
+    if (confirm('登出 Google 同步？本機的資料會保留，只是不再自動同步。')) sync.signOut();
+  });
+}
 
 // ── PWA ───────────────────────────────────────────────────────────────────────
 if ('serviceWorker' in navigator) {

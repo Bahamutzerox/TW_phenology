@@ -29,6 +29,7 @@
       </div>
     </div>
 
+    <button id="sync-btn" class="saved-btn sync-btn" hidden></button>
     <button id="saved-btn" class="saved-btn">備忘錄</button>
   </header>
 
@@ -168,6 +169,12 @@
         <input id="import-file" type="file" accept="application/json,.json" hidden>
         <button id="memo-close-btn" class="memo-close">返回</button>
       </div>
+    </div>
+    <div id="sync-panel" class="sync-panel" hidden>
+      <span class="sync-title">Google 同步</span>
+      <span id="sync-info" class="sync-info"></span>
+      <button id="sync-now-btn" class="memo-close"></button>
+      <button id="sync-signout-btn" class="memo-close" hidden>登出</button>
     </div>
     <div class="memo-toolbar">
       <span class="memo-toolbar-label">顯示</span>
