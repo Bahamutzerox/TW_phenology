@@ -58,8 +58,12 @@ export function renderMap(containerId, inatRecords, gbifRecords) {
     bounds.push([r.lat, r.lng]);
   }
 
-  if (bounds.length > 0) {
-    _map.fitBounds(bounds, { padding: [20, 20], maxZoom: 12 });
+  // Records are mostly Taiwanese; a few specimens carry wrong coordinates
+  // (e.g. in Africa) and would zoom the map out to the whole world
+  const inTW = bounds.filter(_inTaiwan);
+  const fit = inTW.length >= bounds.length / 2 ? inTW : bounds;
+  if (fit.length > 0) {
+    _map.fitBounds(fit, { padding: [20, 20], maxZoom: 12 });
   }
 }
 
@@ -90,6 +94,11 @@ function _popup(title, color, rows, url) {
   a.textContent = '查看原始記錄';
   box.appendChild(a);
   return box;
+}
+
+// Taiwan, Penghu, Kinmen, Matsu, Pratas, Lanyu
+function _inTaiwan([lat, lng]) {
+  return lat >= 20.5 && lat <= 26.5 && lng >= 116.5 && lng <= 123;
 }
 
 function _sample(arr, n) {
