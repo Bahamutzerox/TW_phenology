@@ -3,8 +3,6 @@ import { parseINatAnnotations, parseReproductiveCondition } from './pheno.js';
 const INAT_BASE = 'https://api.inaturalist.org/v1';
 const GBIF_BASE = 'https://api.gbif.org/v1';
 
-const PHENOLOGY = { FLOWERING: 13, FRUITING: 14, BUDDING: 15 };
-
 export async function searchTaxa(query) {
   const url = `${INAT_BASE}/taxa?q=${encodeURIComponent(query)}&rank=species,subspecies,variety,genus&per_page=10&order_by=observations_count&locale=zh-TW`;
   const res = await fetch(url);
@@ -67,61 +65,6 @@ async function _searchViaGBIFVernacular(query, existing) {
 }
 
 const TAIWAN_PLACE_ID = 7887;
-
-export async function fetchINatPhenology(taxonId, onProgress, { taiwan = false } = {}) {
-  const types = [
-    { key: 'flowering', value_id: PHENOLOGY.FLOWERING },
-    { key: 'fruiting',  value_id: PHENOLOGY.FRUITING  },
-    { key: 'budding',   value_id: PHENOLOGY.BUDDING   },
-  ];
-  const results = { flowering: [], fruiting: [], budding: [] };
-
-  for (const type of types) {
-    try {
-      results[type.key] = await _fetchINatPages(taxonId, type.value_id, type.key, taiwan);
-    } catch (e) {
-      console.warn(`iNat ${type.key} fetch failed:`, e);
-    }
-    if (onProgress) onProgress(type.key);
-  }
-  return results;
-}
-
-async function _fetchINatPages(taxonId, termValueId, typeKey, taiwan) {
-  const records = [];
-  const MAX_PAGES = 5;
-  const placeParam = taiwan ? `&place_id=${TAIWAN_PLACE_ID}` : '';
-
-  for (let page = 1; page <= MAX_PAGES; page++) {
-    const url = `${INAT_BASE}/observations?taxon_id=${taxonId}&term_id=12&term_value_id=${termValueId}${placeParam}&per_page=200&page=${page}&order_by=observed_on`;
-    const res = await fetch(url);
-    if (!res.ok) break;
-    const data = await res.json();
-
-    for (const obs of data.results) {
-      const month = obs.observed_on_details?.month;
-      if (!month) continue;
-      const coords = _parseINatCoords(obs);
-      records.push({
-        id: obs.id,
-        type: typeKey,
-        observed_on: obs.observed_on || '',
-        month,
-        year: obs.observed_on_details?.year || null,
-        lat: coords?.lat ?? null,
-        lng: coords?.lng ?? null,
-        place: obs.place_guess || '',
-        quality: obs.quality_grade || '',
-        source: 'inat',
-        url: `https://www.inaturalist.org/observations/${obs.id}`,
-      });
-    }
-
-    if (data.results.length < 200) break;
-    if (records.length >= data.total_results) break;
-  }
-  return records;
-}
 
 function _parseINatCoords(obs) {
   if (obs.obscured) return null;

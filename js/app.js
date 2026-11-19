@@ -1,7 +1,7 @@
 import { searchTaxa, fetchINatObservations, matchGBIFTaxon, fetchGBIFSpecimens } from './api.js';
 import { renderTimeline, renderMonthDetail } from './timeline.js';
 import { renderMap } from './map.js';
-import { saveSearch, listSearches, deleteSearch, listAnnotations } from './storage.js';
+import { saveSearch, listSearches, deleteSearch, listAnnotations, listNotes, putNote, deleteNote, noteKey } from './storage.js';
 import { normalizeInatRecords, groupByTaxon, monthlyProfile, renderMemo, countInMonth } from './memo.js';
 import { PHENO, effectivePheno, hasPheno } from './pheno.js';
 import { openAnnotator } from './annotate.js';
@@ -23,6 +23,7 @@ const state = {
   curveMode:    'source',
   detailMonth:  0,
   annotations:  new Map(),   // recordKey → labels
+  notes:        new Map(),   // noteKey(taxon name) → note
 };
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
@@ -87,7 +88,16 @@ function showAC(taxa) {
     }
     const info = document.createElement('div');
     info.className = 'ac-info';
-    info.innerHTML = `<div class="ac-sci">${t.name}</div>${t.common_name ? `<div class="ac-common">${t.common_name}</div>` : ''}`;
+    const sci = document.createElement('div');
+    sci.className = 'ac-sci';
+    sci.textContent = t.name;
+    info.appendChild(sci);
+    if (t.common_name) {
+      const common = document.createElement('div');
+      common.className = 'ac-common';
+      common.textContent = t.common_name;
+      info.appendChild(common);
+    }
     li.appendChild(info);
     li.addEventListener('click', () => { searchInput.value = t.name; hideAC(); runSearch(t); });
     acList.appendChild(li);
@@ -192,6 +202,7 @@ function refreshUI() {
   monthFilter.value = '0';
   typeFilter.value  = 'all';
   drawTimeline();
+  showNoteEditor();
 
   // Map (always render; re-render on new search)
   renderMap('map-container', state.inatRecords, state.gbifRecords);
@@ -427,6 +438,8 @@ function closeMemo() {
 
 async function loadMemo() {
   memoList.innerHTML = '<div class="empty-state" style="opacity:.5">讀取中...</div>';
+  flushNote();
+  await notesReady;
   try {
     memoItems = groupByTaxon(await listSearches());
   } catch {
@@ -456,14 +469,29 @@ function drawMemo() {
   }
 
   const mode = state.memoMode;
-  const items = memoItems.map(it => ({ ...it, profile: monthlyProfile(it.entry, mode, state.annotations) }));
-  const what = mode === 'flower' ? '「花」記錄' : mode === 'fruit' ? '「果」記錄' : '記錄';
-  memoList.style.setProperty('--memo-color', mode === 'all' ? 'var(--brand)' : PHENO[mode].color);
+  const TARGET_COLOR = { flower: PHENO.flower.color, fruit: PHENO.fruit.color, both: '#b05a4a' };
+  const items = memoItems.map(it => {
+    const note = state.notes.get(noteKey(it.entry.taxon_name));
+    const target = note?.target || '';
+    const m = mode === 'target' ? (target || 'all') : mode;
+    return {
+      ...it,
+      note,
+      profile: monthlyProfile(it.entry, m, state.annotations),
+      color: mode === 'target' && target ? TARGET_COLOR[target] : null,
+    };
+  });
+  const what = mode === 'flower' ? '「花」記錄' : mode === 'fruit' ? '「果」記錄'
+    : mode === 'target' ? '採集目標記錄' : '記錄';
+  memoList.style.setProperty('--memo-color', mode === 'all' || mode === 'target' ? 'var(--brand)' : PHENO[mode].color);
 
+  const noTarget = items.filter(it => !it.note?.target).length;
   memoSummary.textContent = month
     ? `${month}月有 ${countInMonth(items, month)} 種處於${what}高峰（已依該月${what}量排序，偏少的物種淡化顯示）`
     : `色塊深淺為各物種每月${what}量（以該物種最多的月份為最深）。`
-      + (mode === 'all' ? '選擇月份可排序。' : '花果判定包含你的標注、iNat 社群標注與標本欄位。');
+      + (mode === 'all' ? '選擇月份可排序。'
+        : mode === 'target' ? `每個物種依筆記中設定的採集目標計算${noTarget ? `，${noTarget} 種未設定目標，以全部記錄計` : ''}。`
+        : '花果判定包含你的標注、iNat 社群標注與標本欄位。');
 
   renderMemo(memoList, items, {
     month,
@@ -588,6 +616,82 @@ async function reloadAnnotations() {
 }
 reloadAnnotations();
 
+// ── Notes ─────────────────────────────────────────────────────────────────────
+const noteText   = $('note-text');
+const noteStatus = $('note-status');
+const noteSeg    = $('note-target');
+let noteTarget = '';
+let noteTimer  = null;
+let noteTaxon  = null;   // species the editor is showing, may lag state.currentTaxon
+
+async function reloadNotes() {
+  try {
+    const list = await listNotes();
+    state.notes.clear();
+    for (const n of list) state.notes.set(n.key, n);
+  } catch (err) {
+    console.warn('Could not load notes:', err);
+  }
+}
+const notesReady = reloadNotes();
+
+function setSeg(seg, mode) {
+  seg.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+}
+
+async function showNoteEditor() {
+  flushNote();
+  await notesReady;
+  noteTaxon = state.currentTaxon?.name || null;
+  const note = state.notes.get(noteKey(noteTaxon));
+  noteTarget = note?.target || '';
+  noteText.value = note?.text || '';
+  setSeg(noteSeg, noteTarget);
+  noteStatus.textContent = note ? `更新於 ${new Date(note.updated).toLocaleDateString('zh-TW')}` : '';
+}
+
+async function saveNote() {
+  noteTimer = null;
+  const taxon = noteTaxon;
+  const text = noteText.value.trim();
+  const target = noteTarget;
+  if (!taxon) return;
+  const key = noteKey(taxon);
+  try {
+    if (!text && !target) {
+      state.notes.delete(key);
+      await deleteNote(key);
+      noteStatus.textContent = '';
+      return;
+    }
+    const note = { key, taxon, target, text, updated: new Date().toISOString() };
+    state.notes.set(key, note);
+    await putNote(note);
+    noteStatus.textContent = '已儲存';
+  } catch (err) {
+    console.error(err);
+    noteStatus.textContent = '儲存失敗';
+  }
+}
+
+// Save pending edits before the editor switches to another species
+function flushNote() {
+  if (noteTimer) { clearTimeout(noteTimer); saveNote(); }
+}
+
+noteText.addEventListener('input', () => {
+  noteStatus.textContent = '編輯中…';
+  clearTimeout(noteTimer);
+  noteTimer = setTimeout(() => saveNote(), 600);
+});
+noteText.addEventListener('blur', flushNote);
+noteSeg.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+  noteTarget = b.dataset.mode;
+  setSeg(noteSeg, noteTarget);
+  clearTimeout(noteTimer);
+  saveNote();
+}));
+
 // ── Backup ────────────────────────────────────────────────────────────────────
 const LAST_EXPORT_KEY = 'tw-phenology:last-export';
 const backupStatus = $('backup-status');
@@ -622,9 +726,11 @@ importFile.addEventListener('change', async () => {
   try {
     const r = await importBackup(file);
     await reloadAnnotations();
+    await reloadNotes();
+    if (state.currentTaxon) showNoteEditor();
     await loadMemo();
     if (state.currentTaxon) { drawTimeline(); drawMonthDetail(); renderRecordsList(); }
-    alert(`匯入完成\n新增物種 ${r.added} 種、更新 ${r.updated} 種、本機已是最新 ${r.skipped} 種\n匯入或更新標注 ${r.annotations} 筆`);
+    alert(`匯入完成\n新增物種 ${r.added} 種、更新 ${r.updated} 種、本機已是最新 ${r.skipped} 種\n匯入或更新標注 ${r.annotations} 筆、筆記 ${r.notes} 則`);
   } catch (err) {
     alert('匯入失敗：' + err.message);
   }

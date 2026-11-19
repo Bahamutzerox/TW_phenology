@@ -121,6 +121,24 @@
 
       <!-- Map panel (sticky) -->
       <div class="col-right">
+        <div class="panel note-panel">
+          <div class="panel-header">
+            <span class="panel-title">採集筆記</span>
+            <span id="note-status" class="note-status"></span>
+          </div>
+          <div class="note-body">
+            <div class="note-target">
+              <span class="note-label">採集目標</span>
+              <div class="seg" id="note-target">
+                <button data-mode="" class="active">未設定</button>
+                <button data-mode="flower">花</button>
+                <button data-mode="fruit">果</button>
+                <button data-mode="both">花與果</button>
+              </div>
+            </div>
+            <textarea id="note-text" rows="3" placeholder="地點、海拔、生育地、上次採集情形…"></textarea>
+          </div>
+        </div>
         <div class="panel map-panel">
           <div class="panel-header">
             <span class="panel-title">分布地圖</span>
@@ -155,6 +173,7 @@
       <span class="memo-toolbar-label">顯示</span>
       <div class="seg" id="memo-mode">
         <button data-mode="all" class="active">全部記錄</button>
+        <button data-mode="target">依採集目標</button>
         <button data-mode="flower">花</button>
         <button data-mode="fruit">果</button>
       </div>

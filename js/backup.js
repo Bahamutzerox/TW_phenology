@@ -1,7 +1,8 @@
-import { listSearches, saveSearch, listAnnotations, putAnnotation } from './storage.js';
+import { listSearches, saveSearch, listAnnotations, putAnnotation, listNotes, putNote, noteKey } from './storage.js';
 
 const FORMAT = 'tw-phenology-backup';
 const LABELS = new Set(['flower', 'fruit', 'bud', 'none']);
+const TARGETS = new Set(['', 'flower', 'fruit', 'both']);
 
 function today() {
   const d = new Date();
@@ -9,8 +10,8 @@ function today() {
 }
 
 export async function exportBackup() {
-  const [searches, annotations] = await Promise.all([listSearches(), listAnnotations()]);
-  const data = { format: FORMAT, version: 1, exported_at: new Date().toISOString(), searches, annotations };
+  const [searches, annotations, notes] = await Promise.all([listSearches(), listAnnotations(), listNotes()]);
+  const data = { format: FORMAT, version: 1, exported_at: new Date().toISOString(), searches, annotations, notes };
   const file = new File([JSON.stringify(data)], `花果期備忘錄-${today()}.json`, { type: 'application/json' });
 
   // On phones the share sheet is the reliable way to put a file in Files / AirDrop / Drive
@@ -52,7 +53,7 @@ export async function importBackup(file) {
   }
   if (data?.format !== FORMAT) throw new Error('這不是花果期備忘錄的匯出檔');
 
-  const result = { added: 0, updated: 0, skipped: 0, annotations: 0 };
+  const result = { added: 0, updated: 0, skipped: 0, annotations: 0, notes: 0 };
 
   const existing = new Map();
   for (const s of await listSearches()) {
@@ -79,6 +80,19 @@ export async function importBackup(file) {
     if (cur && (cur.updated || '') >= (a.updated || '')) continue;
     await putAnnotation({ key: a.key, taxon: a.taxon || '', labels: a.labels, updated: a.updated || new Date().toISOString() });
     result.annotations++;
+  }
+
+  const notes = new Map((await listNotes()).map(n => [n.key, n]));
+  for (const n of data.notes || []) {
+    if (!n || typeof n.taxon !== 'string' || !n.taxon || !TARGETS.has(n.target ?? '')) continue;
+    const key = noteKey(n.taxon);
+    const cur = notes.get(key);
+    if (cur && (cur.updated || '') >= (n.updated || '')) continue;
+    await putNote({
+      key, taxon: n.taxon, target: n.target || '', text: String(n.text || ''),
+      updated: n.updated || new Date().toISOString(),
+    });
+    result.notes++;
   }
   return result;
 }

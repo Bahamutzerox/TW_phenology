@@ -304,6 +304,52 @@ body {
 .col-right {
   position: sticky;
   top: calc(var(--header-h) + 12px);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ── Notes ────────────────────────────────────────────────────────────── */
+.note-status { font-size: .72rem; color: var(--text-muted); }
+.note-body { padding: 10px 14px 12px; display: flex; flex-direction: column; gap: 8px; }
+.note-target { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.note-label { font-size: .78rem; color: var(--text-muted); font-weight: 600; }
+#note-text {
+  width: 100%;
+  resize: vertical;
+  min-height: 64px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font: inherit;
+  font-size: .85rem;
+  line-height: 1.5;
+  color: var(--text);
+  background: #fbfcfb;
+}
+#note-text:focus { outline: none; border-color: var(--brand-light); background: #fff; }
+
+.memo-target {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: .66rem;
+  font-style: normal;
+  font-weight: 600;
+  vertical-align: 1px;
+  color: #fff;
+}
+.memo-target.t-flower { background: #d6457a; }
+.memo-target.t-fruit  { background: #d98a1f; }
+.memo-target.t-both   { background: linear-gradient(90deg, #d6457a 50%, #d98a1f 50%); }
+.memo-note {
+  font-size: .72rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ── Panels ───────────────────────────────────────────────────────────── */
@@ -414,7 +460,7 @@ body {
 
 /* ── Map ──────────────────────────────────────────────────────────────── */
 .map-container {
-  height: 440px;
+  height: clamp(260px, calc(100vh - var(--header-h) - 270px), 440px);
 }
 
 .map-legend {
@@ -887,8 +933,13 @@ body {
   .saved-btn   { order: 1; margin-left: auto; }
 
   .dashboard { padding: 10px 10px 20px; }
-  .dashboard-grid { grid-template-columns: 1fr; }
-  .col-right { position: static; }
+  /* Flatten both columns so panels can be reordered: notes first for field use */
+  .dashboard-grid { display: flex; flex-direction: column; gap: 12px; }
+  .col-left, .col-right { display: contents; }
+  .note-panel     { order: 0; }
+  .timeline-panel { order: 1; }
+  .map-panel      { order: 2; }
+  .records-panel  { order: 3; }
   .map-container { height: 300px; }
   .records-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
 

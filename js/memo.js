@@ -17,11 +17,13 @@ export function normalizeInatRecords(raw) {
   return out;
 }
 
-// mode: 'all' | 'flower' | 'fruit'
+// mode: 'all' | 'flower' | 'fruit' | 'both' (flower or fruit)
 export function monthlyProfile(entry, mode = 'all', annotations = new Map()) {
   const counts = new Array(12).fill(0);
   const all = [...normalizeInatRecords(entry.inat_records), ...(entry.gbif_records || [])];
-  const recs = mode === 'all' ? all : all.filter(r => hasPheno(r, annotations, mode));
+  const recs = mode === 'all' ? all
+    : mode === 'both' ? all.filter(r => hasPheno(r, annotations, 'flower') || hasPheno(r, annotations, 'fruit'))
+    : all.filter(r => hasPheno(r, annotations, mode));
   for (const r of recs) {
     if (r.month >= 1 && r.month <= 12) counts[r.month - 1]++;
   }
@@ -64,7 +66,9 @@ function div(cls, text) {
   return d;
 }
 
-// items: [{ entry, ids, profile }]
+const TARGET_TEXT = { flower: '採花', fruit: '採果', both: '花果' };
+
+// items: [{ entry, ids, profile, note }]
 export function renderMemo(container, items, { month = 0, onLoad, onDelete } = {}) {
   container.innerHTML = '';
   const thisMonth = new Date().getMonth() + 1;
@@ -93,16 +97,29 @@ export function renderMemo(container, items, { month = 0, onLoad, onDelete } = {
   container.appendChild(head);
 
   for (const item of sorted) {
-    const { entry, profile, ids } = item;
+    const { entry, profile, ids, note } = item;
     const lv = month ? profile.levels[month - 1] : 1;
     const row = div('memo-row');
     if (month && lv < DIM_THRESHOLD) row.classList.add('dim');
+    if (item.color) row.style.setProperty('--memo-color', item.color);
 
     const name = document.createElement('button');
     name.className = 'memo-name';
     name.title = '載入此物種';
-    name.appendChild(div('memo-sci', entry.taxon_name));
+    const sci = div('memo-sci', entry.taxon_name);
+    if (note?.target) {
+      const t = document.createElement('span');
+      t.className = `memo-target t-${note.target}`;
+      t.textContent = TARGET_TEXT[note.target];
+      sci.appendChild(t);
+    }
+    name.appendChild(sci);
     if (entry.taxon_common) name.appendChild(div('memo-common', entry.taxon_common));
+    if (note?.text) {
+      const n = div('memo-note', note.text.replace(/\s+/g, ' '));
+      n.title = note.text;
+      name.appendChild(n);
+    }
     name.addEventListener('click', () => onLoad?.(entry));
     row.appendChild(name);
 

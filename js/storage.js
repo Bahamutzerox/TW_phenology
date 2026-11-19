@@ -1,7 +1,8 @@
 const DB_NAME = 'flowering_time_db';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const STORE = 'searches';
 const ANN_STORE = 'annotations';
+const NOTE_STORE = 'notes';
 
 function openDB() {
   return new Promise((resolve, reject) => {
@@ -15,6 +16,9 @@ function openDB() {
       if (!db.objectStoreNames.contains(ANN_STORE)) {
         db.createObjectStore(ANN_STORE, { keyPath: 'key' })
           .createIndex('taxon', 'taxon', { unique: false });
+      }
+      if (!db.objectStoreNames.contains(NOTE_STORE)) {
+        db.createObjectStore(NOTE_STORE, { keyPath: 'key' });
       }
     };
     req.onsuccess = (e) => resolve(e.target.result);
@@ -56,4 +60,19 @@ export function putAnnotation(ann) {
 
 export function deleteAnnotation(key) {
   return run(ANN_STORE, 'readwrite', s => s.delete(key));
+}
+
+// Note: { key: lowercased scientific name, taxon, target: ''|'flower'|'fruit'|'both', text, updated }
+export const noteKey = name => (name || '').toLowerCase();
+
+export function listNotes() {
+  return run(NOTE_STORE, 'readonly', s => s.getAll());
+}
+
+export function putNote(note) {
+  return run(NOTE_STORE, 'readwrite', s => s.put({ updated: new Date().toISOString(), ...note }));
+}
+
+export function deleteNote(key) {
+  return run(NOTE_STORE, 'readwrite', s => s.delete(key));
 }
