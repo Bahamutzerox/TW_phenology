@@ -1,23 +1,30 @@
 let _map = null;
 let _markers = null;
+let _resizeObserver = null;
 
 export function initMap(containerId) {
   if (_map) { _map.remove(); _map = null; }
 
-  _map = L.map(containerId).setView([23.5, 121], 7);
+  const el = document.getElementById(containerId);
+  _map = L.map(el).setView([23.5, 121], 7);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     maxZoom: 18,
   }).addTo(_map);
   _markers = L.layerGroup().addTo(_map);
+
+  // Layout changes (phone rotation, hidden → shown) otherwise leave grey untiled areas
+  _resizeObserver?.disconnect();
+  _resizeObserver = new ResizeObserver(() => _map?.invalidateSize());
+  _resizeObserver.observe(el);
 }
 
 export function renderMap(containerId, inatRecords, gbifRecords) {
   if (!_map) initMap(containerId);
+  _map.invalidateSize();
   _markers.clearLayers();
 
   const bounds = [];
-
   const inatSample = inatRecords.length > 800 ? _sample(inatRecords, 800) : inatRecords;
   const gbifSample = gbifRecords.length > 500 ? _sample(gbifRecords, 500) : gbifRecords;
 
@@ -28,17 +35,25 @@ export function renderMap(containerId, inatRecords, gbifRecords) {
     const marker = L.circleMarker([r.lat, r.lng], {
       radius: 5, color: '#e76f51', fillColor: '#e76f51', fillOpacity: 0.65, weight: 1,
     });
-    marker.bindPopup(_inatPopup(r), { maxWidth: 240 });
+    marker.bindPopup(() => _popup('iNaturalist', '#e76f51', [
+      ['日期', r.observed_on || '—'],
+      ['地點', r.place || '—'],
+    ], r.url), { maxWidth: 240 });
     _markers.addLayer(marker);
     bounds.push([r.lat, r.lng]);
   }
 
   for (const r of gbifSample) {
     if (!r.lat || !r.lng) continue;
+    const date = r.year ? `${r.year}-${String(r.month).padStart(2, '0')}` : `${r.month}月`;
     const marker = L.circleMarker([r.lat, r.lng], {
       radius: 5, color: '#4361ee', fillColor: '#4361ee', fillOpacity: 0.65, weight: 1,
     });
-    marker.bindPopup(_gbifPopup(r), { maxWidth: 240 });
+    marker.bindPopup(() => _popup('GBIF 標本', '#4361ee', [
+      ['日期', date],
+      ['典藏', r.institution || r.dataset || '—'],
+      ['採集者', r.recorded_by || '—'],
+    ], r.url), { maxWidth: 240 });
     _markers.addLayer(marker);
     bounds.push([r.lat, r.lng]);
   }
@@ -46,33 +61,35 @@ export function renderMap(containerId, inatRecords, gbifRecords) {
   if (bounds.length > 0) {
     _map.fitBounds(bounds, { padding: [20, 20], maxZoom: 12 });
   }
-  setTimeout(() => _map.invalidateSize(), 150);
 }
 
 export function invalidateMap() {
   if (_map) setTimeout(() => _map.invalidateSize(), 150);
 }
 
-function _inatPopup(r) {
-  return `
-    <div style="line-height:1.5">
-      <b style="color:#e76f51">iNaturalist</b><br>
-      📅 ${r.observed_on || '—'}<br>
-      📍 ${r.place || '—'}<br>
-      <a href="${r.url}" target="_blank" rel="noopener" style="color:#2d6a4f">查看原始記錄 ↗</a>
-    </div>`;
-}
-
-function _gbifPopup(r) {
-  const date = r.year ? `${r.year}-${String(r.month).padStart(2, '0')}` : `${r.month}月`;
-  return `
-    <div style="line-height:1.5">
-      <b style="color:#4361ee">GBIF 標本</b><br>
-      📅 ${date}<br>
-      🏛️ ${r.institution || r.dataset || '—'}<br>
-      👤 ${r.recorded_by || '—'}<br>
-      <a href="${r.url}" target="_blank" rel="noopener" style="color:#2d6a4f">查看原始記錄 ↗</a>
-    </div>`;
+function _popup(title, color, rows, url) {
+  const box = document.createElement('div');
+  box.style.lineHeight = '1.55';
+  const t = document.createElement('b');
+  t.style.color = color;
+  t.textContent = title;
+  box.appendChild(t);
+  for (const [k, v] of rows) {
+    const line = document.createElement('div');
+    const key = document.createElement('span');
+    key.style.color = '#6b8070';
+    key.textContent = `${k}　`;
+    line.append(key, v);
+    box.appendChild(line);
+  }
+  const a = document.createElement('a');
+  a.href = url;
+  a.target = '_blank';
+  a.rel = 'noopener noreferrer';
+  a.style.color = '#2d6a4f';
+  a.textContent = '查看原始記錄';
+  box.appendChild(a);
+  return box;
 }
 
 function _sample(arr, n) {

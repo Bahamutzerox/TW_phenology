@@ -963,7 +963,7 @@ body {
 
   .dashboard { padding: 10px 10px 20px; }
   /* Flatten both columns so panels can be reordered: notes first for field use */
-  .dashboard-grid { display: flex; flex-direction: column; gap: 12px; }
+  .dashboard-grid { display: flex; flex-direction: column; align-items: stretch; gap: 12px; }
   .col-left, .col-right { display: contents; }
   .note-panel     { order: 0; }
   .timeline-panel { order: 1; }

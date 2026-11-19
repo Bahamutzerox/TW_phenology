@@ -1,4 +1,4 @@
-const CACHE = 'flowering-time-v16';
+const CACHE = 'flowering-time-v17';
 
 const PRECACHE = [
   './',
@@ -21,7 +21,8 @@ const PRECACHE = [
 self.addEventListener('install', e => {
   e.waitUntil(
     caches.open(CACHE)
-      .then(c => c.addAll(PRECACHE))
+      // Bypass the HTTP cache so a new version never precaches stale files
+      .then(c => c.addAll(PRECACHE.map(u => new Request(u, { cache: 'reload' }))))
       .then(() => self.skipWaiting())
   );
 });
