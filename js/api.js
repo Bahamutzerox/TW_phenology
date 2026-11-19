@@ -18,6 +18,8 @@ export async function searchTaxa(query) {
     common_name: /[㐀-鿿]/.test(t.preferred_common_name || '') ? t.preferred_common_name
       : /[㐀-鿿]/.test(t.matched_term || '') ? t.matched_term : (t.preferred_common_name || ''),
     matched_term: t.matched_term || '',
+    // The name the user typed, when iNat files it as a synonym (e.g. 昭和草 → 野茼蒿)
+    alias: _sameName(t.matched_term, query) && !_sameName(t.matched_term, t.preferred_common_name) ? t.matched_term : '',
     photo_url: t.default_photo?.square_url || null,
     observations_count: t.observations_count || 0,
   }));
@@ -38,6 +40,9 @@ export async function searchTaxa(query) {
 
   return results.slice(0, 8);
 }
+
+const _norm = s => (s || '').trim().toLowerCase().replace(/台/g, '臺');
+function _sameName(a, b) { return !!a && !!b && _norm(a) === _norm(b); }
 
 async function _searchViaGBIFVernacular(query, existing) {
   const res = await fetch(`${GBIF_BASE}/species/search?q=${encodeURIComponent(query)}&limit=8`);

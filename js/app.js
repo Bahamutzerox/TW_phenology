@@ -99,7 +99,7 @@ function showAC(taxa) {
     if (t.common_name) {
       const common = document.createElement('div');
       common.className = 'ac-common';
-      common.textContent = t.common_name;
+      common.textContent = t.alias ? `${t.common_name}（${t.alias}）` : t.common_name;
       info.appendChild(common);
     }
     li.appendChild(info);
@@ -811,4 +811,12 @@ if (sync) {
 if ('serviceWorker' in navigator) {
   const swUrl = new URL('../sw.js', import.meta.url).href;
   navigator.serviceWorker.register(swUrl).catch(() => {});
+  // A new version took over: reload once so the page runs the new code, not the old cached copy
+  const hadController = !!navigator.serviceWorker.controller;
+  let reloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController || reloaded) return;
+    reloaded = true;
+    location.reload();
+  });
 }
