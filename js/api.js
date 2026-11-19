@@ -4,7 +4,9 @@ const INAT_BASE = 'https://api.inaturalist.org/v1';
 const GBIF_BASE = 'https://api.gbif.org/v1';
 
 export async function searchTaxa(query) {
-  const url = `${INAT_BASE}/taxa?q=${encodeURIComponent(query)}&rank=species,subspecies,variety,genus&per_page=10&order_by=observations_count&locale=zh-TW`;
+  // autocomplete ranks exact name matches first; /taxa?order_by=observations_count buried
+  // rare species (e.g. 山芫荽) under popular taxa. taxon_id 47126 = Plantae.
+  const url = `${INAT_BASE}/taxa/autocomplete?q=${encodeURIComponent(query)}&taxon_id=47126&rank=species,subspecies,variety,genus&per_page=10&locale=zh-TW`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`iNat taxa search failed: ${res.status}`);
   const data = await res.json();
@@ -12,7 +14,9 @@ export async function searchTaxa(query) {
     id: t.id,
     name: t.name,
     rank: t.rank,
-    common_name: /[㐀-鿿]/.test(t.matched_term) ? t.matched_term : (t.preferred_common_name || ''),
+    // Prefer iNat's zh-TW name; matched_term can be a simplified-Chinese synonym
+    common_name: /[㐀-鿿]/.test(t.preferred_common_name || '') ? t.preferred_common_name
+      : /[㐀-鿿]/.test(t.matched_term || '') ? t.matched_term : (t.preferred_common_name || ''),
     matched_term: t.matched_term || '',
     photo_url: t.default_photo?.square_url || null,
     observations_count: t.observations_count || 0,
