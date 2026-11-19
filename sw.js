@@ -1,4 +1,4 @@
-const CACHE = 'flowering-time-v10';
+const CACHE = 'flowering-time-v11';
 
 const PRECACHE = [
   './',
@@ -9,6 +9,7 @@ const PRECACHE = [
   './js/timeline.js',
   './js/map.js',
   './js/storage.js',
+  './js/memo.js',
   './manifest.json',
 ];
 

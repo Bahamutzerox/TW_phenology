@@ -29,7 +29,7 @@
       </div>
     </div>
 
-    <button id="saved-btn" class="saved-btn">已儲存</button>
+    <button id="saved-btn" class="saved-btn">備忘錄</button>
   </header>
 
   <!-- ── Progress ─────────────────────────────────────────────────────── -->
@@ -58,7 +58,7 @@
       </div>
       <div id="stats-row" class="stats-row"></div>
       <div id="save-bar" class="save-bar" hidden>
-        <button id="save-btn">儲存</button>
+        <button id="save-btn">加入備忘錄</button>
         <span id="save-status"></span>
       </div>
     </div>
@@ -131,14 +131,22 @@
     </div><!-- dashboard-grid -->
   </div><!-- dashboard -->
 
-  <!-- ── Saved panel (drawer) ──────────────────────────────────────────── -->
-  <div id="saved-panel" class="saved-panel" hidden>
-    <div class="saved-panel-header">
-      <h3>已儲存的查詢</h3>
-      <button id="saved-close-btn">✕</button>
+  <!-- ── Collection memo (saved species overview) ─────────────────────── -->
+  <section id="memo-view" class="memo-view" hidden>
+    <div class="memo-head">
+      <div>
+        <h2>採集備忘錄</h2>
+        <p id="memo-count" class="memo-count"></p>
+      </div>
+      <button id="memo-close-btn" class="memo-close">返回</button>
     </div>
-    <div id="saved-list" class="saved-list"></div>
-  </div>
+    <div class="memo-toolbar">
+      <span class="memo-toolbar-label">預計採集月份</span>
+      <div id="memo-months" class="memo-months"></div>
+    </div>
+    <p id="memo-summary" class="memo-summary"></p>
+    <div id="memo-list" class="panel memo-list"></div>
+  </section>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
   <script type="module" src="js/app.js"></script>

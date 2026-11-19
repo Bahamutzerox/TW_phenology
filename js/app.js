@@ -2,6 +2,7 @@ import { searchTaxa, fetchINatObservations, matchGBIFTaxon, fetchGBIFSpecimens }
 import { renderTimeline, renderMonthDetail } from './timeline.js';
 import { renderMap } from './map.js';
 import { saveSearch, listSearches, deleteSearch } from './storage.js';
+import { normalizeInatRecords, groupByTaxon, renderMemo, countInMonth } from './memo.js';
 
 const RECORDS_PER_PAGE = 60;
 const KDE_BANDWIDTH    = 10;
@@ -14,6 +15,7 @@ const state = {
   recordOffset: 0,
   mapReady:     false,
   view:         'grid',
+  memoMonth:    0,
 };
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
@@ -31,7 +33,6 @@ const statsRow     = $('stats-row');
 const timelineEl   = $('timeline-container');
 const mapContainer = $('map-container');
 const recordsList  = $('records-list');
-const savedList    = $('saved-list');
 const monthFilter  = $('month-filter');
 const typeFilter   = $('type-filter');
 const monthDetailWrap  = $('month-detail-wrap');
@@ -42,9 +43,13 @@ const saveBtn      = $('save-btn');
 const saveStatus   = $('save-status');
 const dashboard    = $('dashboard');
 const introState   = $('intro-state');
-const savedPanel   = $('saved-panel');
 const savedBtn     = $('saved-btn');
-const savedCloseBtn = $('saved-close-btn');
+const memoView     = $('memo-view');
+const memoList     = $('memo-list');
+const memoMonths   = $('memo-months');
+const memoCount    = $('memo-count');
+const memoSummary  = $('memo-summary');
+const memoCloseBtn = $('memo-close-btn');
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
 function debounce(fn, ms) {
@@ -95,15 +100,7 @@ async function runSearch(taxon) {
   state.gbifRecords  = [];
   state.mapReady     = false;
 
-  // Taxon card
-  taxonSci.textContent    = taxon.name;
-  taxonCommon.textContent = taxon.common_name || (taxon.matched_term !== taxon.name ? taxon.matched_term : '');
-  if (taxon.photo_url) {
-    taxonPhoto.src    = taxon.photo_url.replace('square', 'medium');
-    taxonPhoto.hidden = false;
-  } else {
-    taxonPhoto.hidden = true;
-  }
+  setTaxonCard(taxon);
 
   // Progress
   saveBar.hidden = true;
@@ -147,6 +144,18 @@ async function runSearch(taxon) {
   }
 }
 
+function setTaxonCard(taxon) {
+  taxonSci.textContent    = taxon.name;
+  taxonCommon.textContent = taxon.common_name
+    || (taxon.matched_term && taxon.matched_term !== taxon.name ? taxon.matched_term : '');
+  if (taxon.photo_url) {
+    taxonPhoto.src    = taxon.photo_url.replace('square', 'medium');
+    taxonPhoto.hidden = false;
+  } else {
+    taxonPhoto.hidden = true;
+  }
+}
+
 function buildAllRecords() {
   const records = [...state.inatRecords, ...state.gbifRecords];
   records.sort((a, b) => a.month - b.month || (b.year || 0) - (a.year || 0));
@@ -158,7 +167,7 @@ function refreshUI() {
   // Hide intro, show dashboard
   introState.hidden = true;
   dashboard.hidden  = false;
-  savedPanel.hidden = true;
+  memoView.hidden   = true;
   savedBtn.classList.remove('active');
 
   // Stats
@@ -297,39 +306,67 @@ function createRecordCard(r) {
   return card;
 }
 
-// ── Saved searches ────────────────────────────────────────────────────────────
-async function renderSavedList() {
-  savedList.innerHTML = '<div class="empty-state" style="opacity:.5">讀取中...</div>';
+// ── Collection memo ───────────────────────────────────────────────────────────
+let memoItems = [];
+
+function openMemo() {
+  introState.hidden = true;
+  dashboard.hidden  = true;
+  memoView.hidden   = false;
+  savedBtn.classList.add('active');
+  loadMemo();
+}
+
+function closeMemo() {
+  memoView.hidden = true;
+  savedBtn.classList.remove('active');
+  if (state.currentTaxon) dashboard.hidden = false;
+  else introState.hidden = false;
+}
+
+async function loadMemo() {
+  memoList.innerHTML = '<div class="empty-state" style="opacity:.5">讀取中...</div>';
   try {
-    const searches = await listSearches();
-    savedList.innerHTML = '';
-    if (!searches.length) {
-      savedList.innerHTML = '<div class="empty-state">尚無儲存的查詢<br><small>搜尋後點擊「儲存」可離線存取</small></div>';
-      return;
-    }
-    for (const s of searches) {
-      const card = document.createElement('div');
-      card.className = 'saved-card';
-      const dateStr = new Date(s.search_date).toLocaleDateString('zh-TW');
-      card.innerHTML = `
-        <div class="saved-name">
-          <div class="sci">${s.taxon_name}</div>
-          <div class="meta">${s.taxon_common ? s.taxon_common + ' · ' : ''}iNat ${s.meta?.total_inat ?? 0} · 標本 ${s.meta?.total_gbif ?? 0}<br>${dateStr}</div>
-        </div>
-        <div class="saved-actions">
-          <button class="btn-load">載入</button>
-          <button class="btn-delete">刪除</button>
-        </div>`;
-      card.querySelector('.btn-load').onclick   = () => loadSaved(s);
-      card.querySelector('.btn-delete').onclick = async () => {
-        await deleteSearch(s.id);
-        renderSavedList();
-      };
-      savedList.appendChild(card);
-    }
+    memoItems = groupByTaxon(await listSearches());
   } catch {
-    savedList.innerHTML = '<div class="empty-state">無法讀取儲存記錄</div>';
+    memoList.innerHTML = '<div class="empty-state">無法讀取備忘錄</div>';
+    return;
   }
+  drawMemo();
+}
+
+function drawMemo() {
+  const month = state.memoMonth;
+  memoCount.textContent = memoItems.length ? `共 ${memoItems.length} 種` : '';
+
+  memoMonths.innerHTML = '';
+  for (let m = 0; m <= 12; m++) {
+    const b = document.createElement('button');
+    b.className = 'memo-month-btn' + (m === month ? ' active' : '');
+    b.textContent = m === 0 ? '全部' : `${m}月`;
+    b.addEventListener('click', () => { state.memoMonth = m; drawMemo(); });
+    memoMonths.appendChild(b);
+  }
+
+  if (!memoItems.length) {
+    memoSummary.textContent = '';
+    memoList.innerHTML = '<div class="empty-state">備忘錄還是空的<br><small>查詢物種後點「加入備忘錄」，之後可在這裡一次比較各物種的花果期</small></div>';
+    return;
+  }
+
+  memoSummary.textContent = month
+    ? `${month}月有 ${countInMonth(memoItems, month)} 種處於記錄高峰（已依該月記錄量排序，記錄偏少的物種淡化顯示）`
+    : '色塊深淺為各物種每月記錄量（以該物種最多的月份為最深）。選擇月份可排序。';
+
+  renderMemo(memoList, memoItems, {
+    month,
+    onLoad: loadSaved,
+    onDelete: async (entry, ids) => {
+      if (!confirm(`從備忘錄刪除 ${entry.taxon_name}？`)) return;
+      for (const id of ids) await deleteSearch(id);
+      loadMemo();
+    },
+  });
 }
 
 function loadSaved(saved) {
@@ -337,20 +374,8 @@ function loadSaved(saved) {
     id: saved.taxon_id_inat, name: saved.taxon_name,
     common_name: saved.taxon_common, photo_url: saved.taxon_photo, gbif_key: saved.taxon_key_gbif,
   };
-  const inatRaw = saved.inat_records;
-  if (Array.isArray(inatRaw)) {
-    state.inatRecords = inatRaw;
-  } else if (inatRaw && typeof inatRaw === 'object') {
-    const seen = new Set();
-    state.inatRecords = [];
-    for (const type of ['flowering', 'fruiting', 'budding']) {
-      for (const r of (inatRaw[type] || [])) {
-        if (!seen.has(r.id)) { seen.add(r.id); state.inatRecords.push(r); }
-      }
-    }
-  } else {
-    state.inatRecords = [];
-  }
+  setTaxonCard(state.currentTaxon);
+  state.inatRecords = normalizeInatRecords(saved.inat_records);
   state.gbifRecords = saved.gbif_records || [];
   state.mapReady    = false;
   searchInput.value = saved.taxon_name;
@@ -365,7 +390,9 @@ async function handleSave() {
   saveStatus.textContent = '儲存中...';
   try {
     const taxon = state.currentTaxon;
+    const existing = (await listSearches()).filter(s => s.taxon_name === taxon.name);
     await saveSearch({
+      id: existing[0]?.id,
       search_date: new Date().toISOString(),
       taxon_name: taxon.name, taxon_common: taxon.common_name || '',
       taxon_id_inat: taxon.id, taxon_key_gbif: taxon.gbif_key || null,
@@ -373,7 +400,8 @@ async function handleSave() {
       inat_records: state.inatRecords, gbif_records: state.gbifRecords,
       meta: { total_inat: state.inatRecords.length, total_gbif: state.gbifRecords.length },
     });
-    saveStatus.textContent = '已儲存';
+    for (const s of existing.slice(1)) await deleteSearch(s.id);
+    saveStatus.textContent = existing.length ? '已更新備忘錄' : '已加入備忘錄';
   } catch (err) {
     saveStatus.textContent = '儲存失敗';
     saveBtn.disabled = false;
@@ -423,19 +451,10 @@ document.querySelectorAll('.view-btn').forEach(btn => {
   });
 });
 
-savedBtn.addEventListener('click', () => {
-  const opening = savedPanel.hidden;
-  savedPanel.hidden = !opening;
-  savedBtn.classList.toggle('active', opening);
-  if (opening) renderSavedList();
-});
+savedBtn.addEventListener('click', () => (memoView.hidden ? openMemo() : closeMemo()));
+memoCloseBtn.addEventListener('click', closeMemo);
 
 $('month-detail-close').addEventListener('click', () => { monthDetailWrap.hidden = true; });
-
-savedCloseBtn.addEventListener('click', () => {
-  savedPanel.hidden = true;
-  savedBtn.classList.remove('active');
-});
 
 // ── PWA ───────────────────────────────────────────────────────────────────────
 if ('serviceWorker' in navigator) {
