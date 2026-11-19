@@ -1,18 +1,14 @@
-import { PHENO, recordKey, effectivePheno } from './pheno.js';
+import { recordKey, effectivePheno, groupInfo } from './pheno.js';
 import { putAnnotation, deleteAnnotation, markDeleted } from './storage.js';
 
-const CHOICES = [
-  { key: '1', labels: ['flower'],          text: '花' },
-  { key: '2', labels: ['fruit'],           text: '果' },
-  { key: '3', labels: ['flower', 'fruit'], text: '花＋果' },
-  { key: '4', labels: ['bud'],             text: '花苞' },
-  { key: '0', labels: ['none'],            text: '無花果' },
-];
 
 const SOURCE_NAME = { user: '你的標注', inat: 'iNat 社群標注', gbif: '標本欄位' };
 
+let GROUP = groupInfo('');
+let CHOICES = [];
+
 function labelText(labels) {
-  return labels.map(l => PHENO[l]?.label || l).join('＋');
+  return labels.map(l => GROUP.labels[l] || l).join('＋');
 }
 
 function largePhoto(url) {
@@ -52,7 +48,9 @@ function h(tag, cls, content) {
   return e;
 }
 
-export function openAnnotator({ records, annotations, taxonName, onlyMonth = 0, onClose }) {
+export function openAnnotator({ records, annotations, taxonName, group = '', onlyMonth = 0, onClose }) {
+  GROUP = groupInfo(group);
+  CHOICES = GROUP.choices.map(([key, labels]) => ({ key, labels, text: labelText(labels) }));
   const queue = buildQueue(records, annotations, onlyMonth);
   let idx = 0;
   let changed = false;
@@ -63,7 +61,7 @@ export function openAnnotator({ records, annotations, taxonName, onlyMonth = 0, 
 
   const top = h('div', 'ann-top');
   const title = h('div', 'ann-title');
-  title.append('標注花果  ');
+  title.append(`標注${GROUP.short}  `);
   title.appendChild(h('i', null, taxonName));
   if (onlyMonth) title.append(`  ·  ${onlyMonth}月`);
   const progress = h('div', 'ann-progress');

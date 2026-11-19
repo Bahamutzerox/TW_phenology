@@ -1,4 +1,4 @@
-import { searchTaxa, fetchINatObservations, matchGBIFTaxon, fetchGBIFSpecimens } from './api.js';
+import { searchTaxa, fetchINatObservations, matchGBIFTaxon, fetchGBIFSpecimens, fetchTaxonGroups } from './api.js';
 import { renderTimeline, renderMonthDetail } from './timeline.js';
 import { renderMap } from './map.js';
 import {
@@ -6,7 +6,7 @@ import {
   noteKey, taxonKey, markDeleted,
 } from './storage.js';
 import { normalizeInatRecords, groupByTaxon, monthlyProfile, renderMemo, countInMonth } from './memo.js';
-import { PHENO, effectivePheno, hasPheno } from './pheno.js';
+import { PHENO, effectivePheno, hasPheno, groupInfo, phenoLabel } from './pheno.js';
 import { openAnnotator } from './annotate.js';
 import { exportBackup, importBackup } from './backup.js';
 import { initSync } from './sync.js';
@@ -38,6 +38,7 @@ const acList       = $('autocomplete-list');
 const taxonPhoto   = $('taxon-photo');
 const taxonSci     = $('taxon-scientific');
 const taxonCommon  = $('taxon-common');
+const taxonGroup   = $('taxon-group');
 const progressSec  = $('progress-section');
 const progressFill = $('progress-fill');
 const progressText = $('progress-text');
@@ -177,6 +178,34 @@ function setTaxonCard(taxon) {
   } else {
     taxonPhoto.hidden = true;
   }
+  applyGroup();
+  // Saved before plant groups existed: look it up once
+  if (taxon.group === undefined && taxon.id) {
+    fetchTaxonGroups([taxon.id]).then(m => {
+      if (!m.has(taxon.id) || state.currentTaxon !== taxon) return;
+      taxon.group = m.get(taxon.id);
+      applyGroup();
+      drawTimeline();
+      drawMonthDetail();
+      renderRecordsList();
+    }).catch(() => {});
+  }
+}
+
+const curGroup = () => state.currentTaxon?.group || '';
+
+// Wording for flower/fruit controls depends on the plant group (fern → sporangia, etc.)
+function applyGroup() {
+  const g = curGroup();
+  const G = groupInfo(g);
+  taxonGroup.hidden = !g;
+  taxonGroup.textContent = G.name;
+  taxonGroup.className = `group-badge g-${g}`;
+  annotateBtn.textContent = `標注${G.short}`;
+  $('curve-mode').querySelector('[data-mode="pheno"]').textContent = G.short;
+  for (const b of noteSeg.querySelectorAll('button')) {
+    if (b.dataset.mode) b.textContent = G.target[b.dataset.mode];
+  }
 }
 
 function buildAllRecords() {
@@ -235,7 +264,7 @@ function timelineSeries() {
   }
   const all = [...inat, ...gbif];
   const series = ['flower', 'fruit', 'bud']
-    .map(k => ({ kind: k, ...PHENO[k], records: all.filter(r => hasPheno(r, state.annotations, k)) }));
+    .map(k => ({ kind: k, ...PHENO[k], label: phenoLabel(k, curGroup()), records: all.filter(r => hasPheno(r, state.annotations, k)) }));
   return series.filter(s => s.kind !== 'bud' || s.records.length);
 }
 
@@ -253,9 +282,11 @@ function drawTimeline() {
     if (e.labels.length) judged++;
     if (e.by === 'user') mine++;
   }
+  const short = groupInfo(curGroup()).short;
+  const from = curGroup() === 'angio' || !curGroup() ? '其餘來自 iNat 社群標注與標本欄位' : '其餘來自標本欄位';
   timelineHint.textContent = judged
-    ? `已判定花果 ${judged} / ${all.length} 筆（你標注 ${mine} 筆，其餘來自 iNat 社群標注與標本欄位）`
-    : '尚無花果資料。按下方「標注花果」開始判定照片。';
+    ? `已判定${short} ${judged} / ${all.length} 筆（你標注 ${mine} 筆，${from}）`
+    : `尚無${short}資料。按下方「標注${short}」開始判定照片。`;
 }
 
 function drawMonthDetail() {
@@ -283,6 +314,7 @@ function startAnnotating() {
     records:     [...state.inatRecords, ...state.gbifRecords],
     annotations: state.annotations,
     taxonName:   state.currentTaxon.name,
+    group:       curGroup(),
     onlyMonth:   parseInt(monthFilter.value) || 0,
     onClose: changed => {
       if (!changed) return;
@@ -382,7 +414,7 @@ function phenoChips(r) {
   const wrap = document.createElement('div');
   wrap.className = 'pheno-chips';
   for (const l of labels) {
-    const c = span(`pheno-chip pheno-${l}${by === 'user' ? ' by-user' : ''}`, PHENO[l].label);
+    const c = span(`pheno-chip pheno-${l}${by === 'user' ? ' by-user' : ''}`, phenoLabel(l, curGroup()));
     c.title = by === 'user' ? '你的標注' : by === 'inat' ? 'iNat 社群標注' : '標本欄位';
     wrap.appendChild(c);
   }
@@ -451,6 +483,26 @@ async function loadMemo() {
     return;
   }
   drawMemo();
+  backfillGroups();
+}
+
+// Species saved before plant groups existed get theirs filled in (needs network)
+async function backfillGroups() {
+  const missing = memoItems.map(it => it.entry).filter(e => e.taxon_group === undefined && e.taxon_id_inat);
+  if (!missing.length || !navigator.onLine) return;
+  try {
+    const groups = await fetchTaxonGroups([...new Set(missing.map(e => e.taxon_id_inat))]);
+    let changed = false;
+    for (const e of missing) {
+      if (!groups.has(e.taxon_id_inat)) continue;
+      e.taxon_group = groups.get(e.taxon_id_inat);
+      await saveSearch(e);
+      changed = true;
+    }
+    if (changed && !memoView.hidden) drawMemo();
+  } catch (err) {
+    console.warn('Could not fill plant groups:', err);
+  }
 }
 
 function drawMemo() {
@@ -495,7 +547,11 @@ function drawMemo() {
     : `色塊深淺為各物種每月${what}量（以該物種最多的月份為最深）。`
       + (mode === 'all' ? '選擇月份可排序。'
         : mode === 'target' ? `每個物種依筆記中設定的採集目標計算${noTarget ? `，${noTarget} 種未設定目標，以全部記錄計` : ''}。`
-        : '花果判定包含你的標注、iNat 社群標注與標本欄位。');
+        : '花果判定包含你的標注、iNat 社群標注與標本欄位。')
+      + (mode !== 'all' && items.some(it => ['fern', 'lyco', 'bryo'].includes(it.entry.taxon_group))
+        ? '蕨類與苔蘚的「花」為未熟孢子囊（孢蒴），「果」為成熟孢子囊（孢蒴）。' : '')
+      + (mode !== 'all' && items.some(it => it.entry.taxon_group === 'gymno')
+        ? '裸子植物的「花」為毬花，「果」為毬果與種子。' : '');
 
   renderMemo(memoList, items, {
     month,
@@ -513,6 +569,7 @@ function loadSaved(saved) {
   state.currentTaxon = {
     id: saved.taxon_id_inat, name: saved.taxon_name,
     common_name: saved.taxon_common, photo_url: saved.taxon_photo, gbif_key: saved.taxon_key_gbif,
+    group: saved.taxon_group,
   };
   setTaxonCard(state.currentTaxon);
   state.inatRecords = normalizeInatRecords(saved.inat_records);
@@ -537,6 +594,7 @@ async function handleSave() {
       taxon_name: taxon.name, taxon_common: taxon.common_name || '',
       taxon_id_inat: taxon.id, taxon_key_gbif: taxon.gbif_key || null,
       taxon_photo: taxon.photo_url || null,
+      taxon_group: taxon.group || '',
       inat_records: state.inatRecords, gbif_records: state.gbifRecords,
       meta: { total_inat: state.inatRecords.length, total_gbif: state.gbifRecords.length },
     });

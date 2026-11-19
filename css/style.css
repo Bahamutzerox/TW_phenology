@@ -1000,3 +1000,13 @@ body {
   .ann-photo-wrap { flex: 0 0 auto; height: 42vh; overflow: hidden; }
   .ann-side    { width: auto; border-left: none; padding: 12px; gap: 10px; }
 }
+
+/* Plant group badge next to the common name */
+.group-badge {
+  display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: 999px;
+  font-size: .72rem; font-weight: 600; letter-spacing: .04em; vertical-align: 2px;
+  background: transparent; color: var(--brand); border: 1px solid currentColor;
+}
+.group-badge.g-fern, .group-badge.g-lyco { color: #3b7a57; }
+.group-badge.g-gymno { color: #6b5a2e; }
+.group-badge.g-bryo  { color: #5b6e2a; }

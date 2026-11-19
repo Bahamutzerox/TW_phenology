@@ -1,4 +1,4 @@
-import { parseINatAnnotations, parseReproductiveCondition } from './pheno.js';
+import { parseINatAnnotations, parseReproductiveCondition, plantGroup } from './pheno.js';
 
 const INAT_BASE = 'https://api.inaturalist.org/v1';
 const GBIF_BASE = 'https://api.gbif.org/v1';
@@ -22,6 +22,7 @@ export async function searchTaxa(query) {
     alias: _sameName(t.matched_term, query) && !_sameName(t.matched_term, t.preferred_common_name) ? t.matched_term : '',
     photo_url: t.default_photo?.square_url || null,
     observations_count: t.observations_count || 0,
+    group: plantGroup(t.ancestor_ids, t.id),
   }));
 
   // For CJK queries, also search GBIF vernacular names as fallback
@@ -67,6 +68,7 @@ async function _searchViaGBIFVernacular(query, existing) {
       matched_term: query,
       photo_url: match.default_photo?.square_url || null,
       observations_count: match.observations_count || 0,
+      group: plantGroup(match.ancestor_ids, match.id),
     };
   });
 
@@ -174,4 +176,15 @@ export async function fetchGBIFSpecimens(taxonKey, onProgress, { taiwan = false 
     if (data.endOfRecords) break;
   }
   return records;
+}
+
+// Plant group for taxa saved before groups existed: Map(id -> group)
+export async function fetchTaxonGroups(ids) {
+  const out = new Map();
+  for (let i = 0; i < ids.length; i += 30) {
+    const res = await fetch(`${INAT_BASE}/taxa/${ids.slice(i, i + 30).join(',')}`);
+    if (!res.ok) continue;
+    for (const t of (await res.json()).results) out.set(t.id, plantGroup(t.ancestor_ids, t.id));
+  }
+  return out;
 }

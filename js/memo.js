@@ -1,4 +1,4 @@
-import { hasPheno } from './pheno.js';
+import { hasPheno, groupInfo } from './pheno.js';
 
 const PEAK_THRESHOLD = 0.5;
 const DIM_THRESHOLD  = 0.25;
@@ -66,7 +66,6 @@ function div(cls, text) {
   return d;
 }
 
-const TARGET_TEXT = { flower: '採花', fruit: '採果', both: '花果' };
 
 // items: [{ entry, ids, profile, note }]
 export function renderMemo(container, items, { month = 0, onLoad, onDelete } = {}) {
@@ -110,11 +109,13 @@ export function renderMemo(container, items, { month = 0, onLoad, onDelete } = {
     if (note?.target) {
       const t = document.createElement('span');
       t.className = `memo-target t-${note.target}`;
-      t.textContent = TARGET_TEXT[note.target];
+      t.textContent = groupInfo(entry.taxon_group).badge[note.target];
       sci.appendChild(t);
     }
     name.appendChild(sci);
-    if (entry.taxon_common) name.appendChild(div('memo-common', entry.taxon_common));
+    const common = [entry.taxon_common, entry.taxon_group && entry.taxon_group !== 'angio' ? groupInfo(entry.taxon_group).name : '']
+      .filter(Boolean).join(' · ');
+    if (common) name.appendChild(div('memo-common', common));
     if (note?.text) {
       const n = div('memo-note', note.text.replace(/\s+/g, ' '));
       n.title = note.text;
