@@ -104,7 +104,10 @@ export function initSync({ onMerged } = {}) {
       },
       error_callback: err => {
         const p = pending; pending = null;
-        p?.reject(new Error(err.type === 'popup_closed' ? '登入視窗已關閉' : (err.message || err.type)));
+        const msg = err.type === 'popup_closed' ? '登入視窗已關閉'
+          : err.type === 'popup_failed_to_open' ? '無法開啟 Google 登入視窗，請允許這個網站顯示彈出式視窗'
+          : (err.message || err.type);
+        p?.reject(new Error(msg));
       },
     });
   }).catch(err => set({ state: 'error', error: err.message }));
