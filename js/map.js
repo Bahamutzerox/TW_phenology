@@ -58,13 +58,11 @@ export function renderMap(containerId, inatRecords, gbifRecords) {
     bounds.push([r.lat, r.lng]);
   }
 
-  // Records are mostly Taiwanese; a few specimens carry wrong coordinates
-  // (e.g. in Africa) and would zoom the map out to the whole world
+  // Always focus on Taiwan: records abroad (non-endemic species, wrong
+  // specimen coordinates) stay on the map but never drive the zoom
   const inTW = bounds.filter(_inTaiwan);
-  const fit = inTW.length >= bounds.length / 2 ? inTW : bounds;
-  if (fit.length > 0) {
-    _map.fitBounds(fit, { padding: [20, 20], maxZoom: 12 });
-  }
+  if (inTW.length > 0) _map.fitBounds(inTW, { padding: [20, 20], maxZoom: 12 });
+  else _map.fitBounds(TAIWAN_BOUNDS);
 }
 
 export function invalidateMap() {
@@ -95,6 +93,8 @@ function _popup(title, color, rows, url) {
   box.appendChild(a);
   return box;
 }
+
+const TAIWAN_BOUNDS = [[21.85, 119.3], [25.35, 122.05]];
 
 // Taiwan, Penghu, Kinmen, Matsu, Pratas, Lanyu
 function _inTaiwan([lat, lng]) {
