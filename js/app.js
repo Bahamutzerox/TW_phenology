@@ -1,8 +1,10 @@
 import { searchTaxa, fetchINatObservations, matchGBIFTaxon, fetchGBIFSpecimens } from './api.js';
 import { renderTimeline, renderMonthDetail } from './timeline.js';
 import { renderMap } from './map.js';
-import { saveSearch, listSearches, deleteSearch } from './storage.js';
-import { normalizeInatRecords, groupByTaxon, renderMemo, countInMonth } from './memo.js';
+import { saveSearch, listSearches, deleteSearch, listAnnotations } from './storage.js';
+import { normalizeInatRecords, groupByTaxon, monthlyProfile, renderMemo, countInMonth } from './memo.js';
+import { PHENO, effectivePheno, hasPheno } from './pheno.js';
+import { openAnnotator } from './annotate.js';
 
 const RECORDS_PER_PAGE = 60;
 const KDE_BANDWIDTH    = 10;
@@ -16,6 +18,10 @@ const state = {
   mapReady:     false,
   view:         'grid',
   memoMonth:    0,
+  memoMode:     'all',
+  curveMode:    'source',
+  detailMonth:  0,
+  annotations:  new Map(),   // recordKey → labels
 };
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
@@ -31,6 +37,8 @@ const progressFill = $('progress-fill');
 const progressText = $('progress-text');
 const statsRow     = $('stats-row');
 const timelineEl   = $('timeline-container');
+const timelineHint = $('timeline-hint');
+const annotateBtn  = $('annotate-btn');
 const mapContainer = $('map-container');
 const recordsList  = $('records-list');
 const monthFilter  = $('month-filter');
@@ -177,18 +185,17 @@ function refreshUI() {
   ].join('');
 
   // Hide month detail on new search
+  state.detailMonth = 0;
   monthDetailWrap.hidden = true;
 
-  // Timeline
-  renderTimeline(timelineEl, state.inatRecords, state.gbifRecords, handleTimelineClick, { bandwidth: KDE_BANDWIDTH });
+  monthFilter.value = '0';
+  typeFilter.value  = 'all';
+  drawTimeline();
 
   // Map (always render; re-render on new search)
   renderMap('map-container', state.inatRecords, state.gbifRecords);
   state.mapReady = true;
 
-  // Records
-  monthFilter.value = '0';
-  typeFilter.value  = 'all';
   renderRecordsList();
 
   // Save
@@ -200,20 +207,74 @@ function refreshUI() {
 // ── Timeline click handler ────────────────────────────────────────────────────
 const MONTH_ZH = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
 
+function timelineSeries() {
+  const type = typeFilter.value;
+  const inat = type === 'gbif' ? [] : state.inatRecords;
+  const gbif = type === 'inat' ? [] : state.gbifRecords;
+  if (state.curveMode === 'source') {
+    return [
+      { label: 'iNaturalist', color: '#52b788', fill: 'rgba(82,183,136,0.45)', records: inat },
+      { label: 'GBIF 標本',   color: '#4361ee', fill: 'rgba(67,97,238,0.3)',   records: gbif },
+    ];
+  }
+  const all = [...inat, ...gbif];
+  const series = ['flower', 'fruit', 'bud']
+    .map(k => ({ kind: k, ...PHENO[k], records: all.filter(r => hasPheno(r, state.annotations, k)) }));
+  return series.filter(s => s.kind !== 'bud' || s.records.length);
+}
+
+function drawTimeline() {
+  renderTimeline(timelineEl, timelineSeries(), handleTimelineClick, { bandwidth: KDE_BANDWIDTH });
+
+  if (state.curveMode === 'source') {
+    timelineHint.textContent = '點擊月份可過濾下方記錄，並放大該月日期分布';
+    return;
+  }
+  const all = [...state.inatRecords, ...state.gbifRecords];
+  let judged = 0, mine = 0;
+  for (const r of all) {
+    const e = effectivePheno(r, state.annotations);
+    if (e.labels.length) judged++;
+    if (e.by === 'user') mine++;
+  }
+  timelineHint.textContent = judged
+    ? `已判定花果 ${judged} / ${all.length} 筆（你標注 ${mine} 筆，其餘來自 iNat 社群標注與標本欄位）`
+    : '尚無花果資料。按下方「標注花果」開始判定照片。';
+}
+
+function drawMonthDetail() {
+  const month = state.detailMonth;
+  if (!month) return;
+  const series = timelineSeries();
+  const parts = series.map(s => `${s.label} ${s.records.filter(r => r.month === month).length} 筆`);
+  monthDetailLabel.textContent = `${MONTH_ZH[month - 1]}  ·  ${parts.join('  /  ')}`;
+  renderMonthDetail(monthDetailChart, series, month);
+  monthDetailWrap.hidden = false;
+}
+
 function handleTimelineClick(month) {
   monthFilter.value  = String(month);
-  typeFilter.value   = 'all';
   state.recordOffset = 0;
   renderRecordsList();
-
-  // Month detail Manhattan plot
-  const inatFil = state.inatRecords.filter(r => r.month === month);
-  const gbifFil = state.gbifRecords.filter(r => r.month === month);
-  monthDetailLabel.textContent =
-    `${MONTH_ZH[month - 1]}  ·  iNat ${inatFil.length} 筆  /  GBIF ${gbifFil.length} 筆`;
-  renderMonthDetail(monthDetailChart, state.inatRecords, state.gbifRecords, month);
-  monthDetailWrap.hidden = false;
+  state.detailMonth = month;
+  drawMonthDetail();
   monthDetailWrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function startAnnotating() {
+  if (!state.currentTaxon) return;
+  openAnnotator({
+    records:     [...state.inatRecords, ...state.gbifRecords],
+    annotations: state.annotations,
+    taxonName:   state.currentTaxon.name,
+    onlyMonth:   parseInt(monthFilter.value) || 0,
+    onClose: changed => {
+      if (!changed) return;
+      drawTimeline();
+      drawMonthDetail();
+      renderRecordsList();
+    },
+  });
 }
 
 // ── Records ───────────────────────────────────────────────────────────────────
@@ -277,32 +338,70 @@ function createGridItem(r) {
     a.appendChild(ph);
   }
 
+  const chips = phenoChips(r);
+  if (chips) a.appendChild(chips);
+
   const overlay = document.createElement('div');
   overlay.className = 'grid-overlay';
   const dateStr = r.observed_on
     ? r.observed_on.slice(0, 7)
     : r.year ? `${r.year}-${String(r.month).padStart(2,'0')}` : `${r.month}月`;
+  overlay.appendChild(span('grid-date', dateStr));
   const loc = r.place || r.institution || '';
-  overlay.innerHTML = `<span class="grid-date">${dateStr}</span>${loc ? `<span class="grid-loc">${loc}</span>` : ''}`;
+  if (loc) overlay.appendChild(span('grid-loc', loc));
   a.appendChild(overlay);
   return a;
 }
 
+function span(cls, text) {
+  const s = document.createElement('span');
+  s.className = cls;
+  s.textContent = text;
+  return s;
+}
+
+function phenoChips(r) {
+  const { labels, by } = effectivePheno(r, state.annotations);
+  if (!labels.length) return null;
+  const wrap = document.createElement('div');
+  wrap.className = 'pheno-chips';
+  for (const l of labels) {
+    const c = span(`pheno-chip pheno-${l}${by === 'user' ? ' by-user' : ''}`, PHENO[l].label);
+    c.title = by === 'user' ? '你的標注' : by === 'inat' ? 'iNat 社群標注' : '標本欄位';
+    wrap.appendChild(c);
+  }
+  return wrap;
+}
+
 function createRecordCard(r) {
-  const [cls, text] = r.source === 'inat'
-    ? ['badge-inat', 'iNat']
-    : ['badge-specimen', '標本'];
+  const [cls, text] = r.source === 'inat' ? ['badge-inat', 'iNat'] : ['badge-specimen', '標本'];
   const dateStr = r.observed_on || (r.year ? `${r.year}-${String(r.month).padStart(2,'0')}` : `${r.month}月`);
   const loc     = r.place || r.institution || r.dataset || '';
   const card    = document.createElement('div');
   card.className = 'record-card';
-  card.innerHTML = `
-    <span class="record-badge ${cls}">${text}</span>
-    <div class="record-info">
-      <div class="record-date">${dateStr}</div>
-      ${loc ? `<div class="record-location">${loc}</div>` : ''}
-    </div>
-    <a class="record-link" href="${r.url}" target="_blank" rel="noopener noreferrer">查看</a>`;
+  card.appendChild(span(`record-badge ${cls}`, text));
+  const info = document.createElement('div');
+  info.className = 'record-info';
+  const date = document.createElement('div');
+  date.className = 'record-date';
+  date.textContent = dateStr;
+  info.appendChild(date);
+  if (loc) {
+    const l = document.createElement('div');
+    l.className = 'record-location';
+    l.textContent = loc;
+    info.appendChild(l);
+  }
+  card.appendChild(info);
+  const chips = phenoChips(r);
+  if (chips) card.appendChild(chips);
+  const link = document.createElement('a');
+  link.className = 'record-link';
+  link.href = r.url;
+  link.target = '_blank';
+  link.rel = 'noopener noreferrer';
+  link.textContent = '查看';
+  card.appendChild(link);
   return card;
 }
 
@@ -354,11 +453,17 @@ function drawMemo() {
     return;
   }
 
-  memoSummary.textContent = month
-    ? `${month}月有 ${countInMonth(memoItems, month)} 種處於記錄高峰（已依該月記錄量排序，記錄偏少的物種淡化顯示）`
-    : '色塊深淺為各物種每月記錄量（以該物種最多的月份為最深）。選擇月份可排序。';
+  const mode = state.memoMode;
+  const items = memoItems.map(it => ({ ...it, profile: monthlyProfile(it.entry, mode, state.annotations) }));
+  const what = mode === 'flower' ? '「花」記錄' : mode === 'fruit' ? '「果」記錄' : '記錄';
+  memoList.style.setProperty('--memo-color', mode === 'all' ? 'var(--brand)' : PHENO[mode].color);
 
-  renderMemo(memoList, memoItems, {
+  memoSummary.textContent = month
+    ? `${month}月有 ${countInMonth(items, month)} 種處於${what}高峰（已依該月${what}量排序，偏少的物種淡化顯示）`
+    : `色塊深淺為各物種每月${what}量（以該物種最多的月份為最深）。`
+      + (mode === 'all' ? '選擇月份可排序。' : '花果判定包含你的標注、iNat 社群標注與標本欄位。');
+
+  renderMemo(memoList, items, {
     month,
     onLoad: loadSaved,
     onDelete: async (entry, ids) => {
@@ -429,16 +534,30 @@ document.addEventListener('click', e => { if (!e.target.closest('.search-box')) 
 monthFilter.addEventListener('change', () => {
   state.recordOffset = 0;
   renderRecordsList();
-  if (monthFilter.value === '0') monthDetailWrap.hidden = true;
+  if (monthFilter.value === '0') hideMonthDetail();
 });
 typeFilter.addEventListener('change',  () => {
   state.recordOffset = 0;
   renderRecordsList();
-  const type = typeFilter.value;
-  const inat = type === 'gbif' ? [] : state.inatRecords;
-  const gbif = type === 'inat' ? [] : state.gbifRecords;
-  renderTimeline(timelineEl, inat, gbif, handleTimelineClick, { bandwidth: KDE_BANDWIDTH });
+  drawTimeline();
+  drawMonthDetail();
 });
+
+function bindSeg(id, onPick) {
+  const seg = $(id);
+  seg.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+    seg.querySelectorAll('button').forEach(x => x.classList.toggle('active', x === b));
+    onPick(b.dataset.mode);
+  }));
+}
+bindSeg('curve-mode', mode => { state.curveMode = mode; drawTimeline(); drawMonthDetail(); });
+bindSeg('memo-mode',  mode => { state.memoMode = mode; drawMemo(); });
+annotateBtn.addEventListener('click', startAnnotating);
+
+function hideMonthDetail() {
+  state.detailMonth = 0;
+  monthDetailWrap.hidden = true;
+}
 saveBtn.addEventListener('click', handleSave);
 
 document.querySelectorAll('.view-btn').forEach(btn => {
@@ -454,7 +573,11 @@ document.querySelectorAll('.view-btn').forEach(btn => {
 savedBtn.addEventListener('click', () => (memoView.hidden ? openMemo() : closeMemo()));
 memoCloseBtn.addEventListener('click', closeMemo);
 
-$('month-detail-close').addEventListener('click', () => { monthDetailWrap.hidden = true; });
+$('month-detail-close').addEventListener('click', hideMonthDetail);
+
+listAnnotations()
+  .then(list => { for (const a of list) state.annotations.set(a.key, a.labels); })
+  .catch(err => console.warn('Could not load annotations:', err));
 
 // ── PWA ───────────────────────────────────────────────────────────────────────
 if ('serviceWorker' in navigator) {

@@ -1,3 +1,5 @@
+import { hasPheno } from './pheno.js';
+
 const PEAK_THRESHOLD = 0.5;
 const DIM_THRESHOLD  = 0.25;
 
@@ -15,14 +17,16 @@ export function normalizeInatRecords(raw) {
   return out;
 }
 
-export function monthlyProfile(entry) {
+// mode: 'all' | 'flower' | 'fruit'
+export function monthlyProfile(entry, mode = 'all', annotations = new Map()) {
   const counts = new Array(12).fill(0);
   const all = [...normalizeInatRecords(entry.inat_records), ...(entry.gbif_records || [])];
-  for (const r of all) {
+  const recs = mode === 'all' ? all : all.filter(r => hasPheno(r, annotations, mode));
+  for (const r of recs) {
     if (r.month >= 1 && r.month <= 12) counts[r.month - 1]++;
   }
   const max = Math.max(...counts);
-  return { counts, levels: counts.map(c => (max ? c / max : 0)) };
+  return { counts, levels: counts.map(c => (max ? c / max : 0)), total: recs.length };
 }
 
 export function peakRanges(levels, threshold = PEAK_THRESHOLD) {
@@ -48,7 +52,7 @@ export function groupByTaxon(searches) {
   for (const s of searches) {
     const key = (s.taxon_name || '').toLowerCase();
     if (map.has(key)) map.get(key).ids.push(s.id);
-    else map.set(key, { entry: s, ids: [s.id], profile: monthlyProfile(s) });
+    else map.set(key, { entry: s, ids: [s.id] });
   }
   return [...map.values()];
 }
@@ -60,6 +64,7 @@ function div(cls, text) {
   return d;
 }
 
+// items: [{ entry, ids, profile }]
 export function renderMemo(container, items, { month = 0, onLoad, onDelete } = {}) {
   container.innerHTML = '';
   const thisMonth = new Date().getMonth() + 1;
@@ -111,7 +116,7 @@ export function renderMemo(container, items, { month = 0, onLoad, onDelete } = {
     });
     row.appendChild(cells);
 
-    row.appendChild(div('memo-peak', peakRanges(profile.levels) || '—'));
+    row.appendChild(div('memo-peak', profile.total ? (peakRanges(profile.levels) || '—') : '尚無資料'));
 
     const del = document.createElement('button');
     del.className = 'memo-del';

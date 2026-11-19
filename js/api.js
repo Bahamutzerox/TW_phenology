@@ -1,3 +1,5 @@
+import { parseINatAnnotations, parseReproductiveCondition } from './pheno.js';
+
 const INAT_BASE = 'https://api.inaturalist.org/v1';
 const GBIF_BASE = 'https://api.gbif.org/v1';
 
@@ -163,6 +165,7 @@ export async function fetchINatObservations(taxonId, onProgress, { taiwan = fals
         source: 'inat',
         url: `https://www.inaturalist.org/observations/${obs.id}`,
         photo_url: obs.photos?.[0]?.url?.replace('square', 'medium') || null,
+        pheno: parseINatAnnotations(obs.annotations),
       });
     }
 
@@ -210,6 +213,7 @@ export async function fetchGBIFSpecimens(taxonKey, onProgress, { taiwan = false 
         country: occ.countryCode || '',
         source: 'gbif',
         photo_url: occ.media?.find(m => m.type === 'StillImage')?.identifier || null,
+        pheno: parseReproductiveCondition(occ.reproductiveCondition),
         url: `https://www.gbif.org/occurrence/${occ.key}`,
       });
     }

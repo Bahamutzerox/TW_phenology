@@ -73,6 +73,10 @@
           <div class="panel-header">
             <span class="panel-title">觀察密度時間軸</span>
             <div class="panel-controls">
+              <div class="seg" id="curve-mode">
+                <button data-mode="source" class="active">來源</button>
+                <button data-mode="pheno">花果</button>
+              </div>
               <select id="month-filter">
                 <option value="0">全部月份</option>
                 <option value="1">1月</option><option value="2">2月</option>
@@ -97,13 +101,14 @@
             </div>
             <div id="month-detail-chart" class="month-detail-chart"></div>
           </div>
-          <p class="timeline-hint">點擊月份區域可過濾下方記錄 · 並放大該月日期分布</p>
+          <p id="timeline-hint" class="timeline-hint"></p>
         </div>
 
         <!-- Records panel -->
         <div class="panel records-panel">
           <div class="panel-header">
             <span class="panel-title">記錄</span>
+            <button id="annotate-btn" class="annotate-btn">標注花果</button>
             <div class="view-toggle">
               <button class="view-btn active" data-view="grid" title="網格">⊞</button>
               <button class="view-btn" data-view="list" title="列表">☰</button>
@@ -139,6 +144,14 @@
         <p id="memo-count" class="memo-count"></p>
       </div>
       <button id="memo-close-btn" class="memo-close">返回</button>
+    </div>
+    <div class="memo-toolbar">
+      <span class="memo-toolbar-label">顯示</span>
+      <div class="seg" id="memo-mode">
+        <button data-mode="all" class="active">全部記錄</button>
+        <button data-mode="flower">花</button>
+        <button data-mode="fruit">果</button>
+      </div>
     </div>
     <div class="memo-toolbar">
       <span class="memo-toolbar-label">預計採集月份</span>
