@@ -1010,3 +1010,32 @@ body {
 .group-badge.g-fern, .group-badge.g-lyco { color: #3b7a57; }
 .group-badge.g-gymno { color: #6b5a2e; }
 .group-badge.g-bryo  { color: #5b6e2a; }
+
+/* Records saved into the species note */
+.pin-btn {
+  font: inherit; font-size: .72rem; cursor: pointer; white-space: nowrap; flex-shrink: 0;
+  padding: 3px 8px; border-radius: 6px; border: 1px solid var(--border);
+  background: #fff; color: var(--text-muted);
+}
+.pin-btn:hover { color: var(--brand); border-color: var(--brand-light); }
+.pin-btn.on { background: var(--brand); border-color: var(--brand); color: #fff; }
+.grid-pin {
+  position: absolute; top: 6px; right: 6px; z-index: 2;
+  padding: 2px 7px; font-size: .66rem; background: rgba(255,255,255,.9);
+  opacity: 0; transition: opacity .15s;
+}
+.grid-item:hover .grid-pin, .grid-pin.on, .grid-pin:focus-visible { opacity: 1; }
+@media (hover: none) { .grid-pin { opacity: 1; } }
+
+.note-pins { display: flex; flex-direction: column; gap: 4px; }
+.note-pins-list { list-style: none; margin: 0; padding: 0; max-height: 220px; overflow-y: auto;
+  border: 1px solid var(--border); border-radius: 8px; }
+.note-pin { display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-bottom: 1px solid var(--border); }
+.note-pin:last-child { border-bottom: none; }
+.note-pin-link { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; text-decoration: none; color: var(--text); font-size: .8rem; }
+.note-pin-link:hover .note-pin-date { color: var(--brand); text-decoration: underline; }
+.note-pin-date { font-weight: 500; white-space: nowrap; }
+.note-pin-place { color: var(--text-muted); font-size: .74rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.note-pin-del { font: inherit; font-size: .7rem; padding: 2px 6px; border: none; background: none; color: var(--text-muted); cursor: pointer; }
+.note-pin-del:hover { color: #c0392b; }
+.memo-pins { font-size: .7rem; color: var(--brand); margin-top: 2px; }

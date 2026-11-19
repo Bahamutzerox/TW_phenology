@@ -6,7 +6,7 @@ import {
   noteKey, taxonKey, markDeleted,
 } from './storage.js';
 import { normalizeInatRecords, groupByTaxon, monthlyProfile, renderMemo, countInMonth } from './memo.js';
-import { PHENO, effectivePheno, hasPheno, groupInfo, phenoLabel } from './pheno.js';
+import { PHENO, effectivePheno, hasPheno, groupInfo, phenoLabel, recordKey } from './pheno.js';
 import { openAnnotator } from './annotate.js';
 import { exportBackup, importBackup } from './backup.js';
 import { initSync } from './sync.js';
@@ -398,6 +398,7 @@ function createGridItem(r) {
   const loc = r.place || r.institution || '';
   if (loc) overlay.appendChild(span('grid-loc', loc));
   a.appendChild(overlay);
+  a.appendChild(pinButton(r, 'grid-pin'));
   return a;
 }
 
@@ -419,6 +420,87 @@ function phenoChips(r) {
     wrap.appendChild(c);
   }
   return wrap;
+}
+
+// ── Records saved into the species note ──────────────────────────────────────
+function pinButton(r, cls) {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = `pin-btn ${cls}`;
+  b.dataset.pin = recordKey(r);
+  setPinButton(b, isPinned(r));
+  b.addEventListener('click', e => {
+    e.preventDefault();      // grid items are links to the source record
+    e.stopPropagation();
+    togglePin(r);
+  });
+  return b;
+}
+
+function setPinButton(b, on) {
+  b.classList.toggle('on', on);
+  b.textContent = on ? '已存' : '存到筆記';
+  b.title = on ? '從筆記移除這筆記錄' : '把這筆記錄存到採集筆記';
+  b.setAttribute('aria-pressed', on);
+}
+
+const isPinned = r => notePins.some(p => p.key === recordKey(r));
+
+function pinSnapshot(r) {
+  const date = r.observed_on || (r.year ? `${r.year}-${String(r.month).padStart(2, '0')}${r.day ? '-' + String(r.day).padStart(2, '0') : ''}` : `${r.month}月`);
+  return {
+    key: recordKey(r), source: r.source, date, month: r.month,
+    place: r.place || r.institution || r.dataset || '',
+    recorded_by: r.recorded_by || '',
+    lat: r.lat ?? null, lng: r.lng ?? null,
+    url: r.url, photo_url: r.photo_url || null,
+    added: new Date().toISOString(),
+  };
+}
+
+function togglePin(r) {
+  if (!noteTaxon) return;
+  const key = recordKey(r);
+  notePins = isPinned(r) ? notePins.filter(p => p.key !== key) : [...notePins, pinSnapshot(r)];
+  document.querySelectorAll(`.pin-btn[data-pin="${CSS.escape(key)}"]`).forEach(b => setPinButton(b, isPinned(r)));
+  renderPins();
+  clearTimeout(noteTimer);
+  saveNote();
+}
+
+function renderPins() {
+  const wrap = $('note-pins');
+  const list = $('note-pins-list');
+  list.innerHTML = '';
+  wrap.hidden = !notePins.length;
+  $('note-pins-count').textContent = notePins.length ? `${notePins.length} 筆` : '';
+  const sorted = [...notePins].sort((a, b) => (a.month || 0) - (b.month || 0) || String(a.date).localeCompare(String(b.date)));
+  for (const p of sorted) {
+    const li = document.createElement('li');
+    li.className = 'note-pin';
+    const a = document.createElement('a');
+    a.href = p.url;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.className = 'note-pin-link';
+    a.appendChild(span(`record-badge ${p.source === 'inat' ? 'badge-inat' : 'badge-specimen'}`, p.source === 'inat' ? 'iNat' : '標本'));
+    a.appendChild(span('note-pin-date', p.date));
+    a.appendChild(span('note-pin-place', [p.place, p.recorded_by].filter(Boolean).join(' · ')));
+    li.appendChild(a);
+    const x = document.createElement('button');
+    x.type = 'button';
+    x.className = 'note-pin-del';
+    x.textContent = '移除';
+    x.addEventListener('click', () => {
+      notePins = notePins.filter(q => q.key !== p.key);
+      document.querySelectorAll(`.pin-btn[data-pin="${CSS.escape(p.key)}"]`).forEach(b => setPinButton(b, false));
+      renderPins();
+      clearTimeout(noteTimer);
+      saveNote();
+    });
+    li.appendChild(x);
+    list.appendChild(li);
+  }
 }
 
 function createRecordCard(r) {
@@ -449,6 +531,7 @@ function createRecordCard(r) {
   link.target = '_blank';
   link.rel = 'noopener noreferrer';
   link.textContent = '查看';
+  card.appendChild(pinButton(r, 'record-pin'));
   card.appendChild(link);
   return card;
 }
@@ -684,6 +767,7 @@ const noteText   = $('note-text');
 const noteStatus = $('note-status');
 const noteSeg    = $('note-target');
 let noteTarget = '';
+let notePins   = [];
 let noteTimer  = null;
 let noteTaxon  = null;   // species the editor is showing, may lag state.currentTaxon
 
@@ -709,7 +793,12 @@ async function showNoteEditor() {
   const note = state.notes.get(noteKey(noteTaxon));
   noteTarget = note?.target || '';
   noteText.value = note?.text || '';
+  notePins = Array.isArray(note?.pins) ? note.pins : [];
   setSeg(noteSeg, noteTarget);
+  renderPins();
+  // Records may have rendered before the note finished loading
+  const keys = new Set(notePins.map(p => p.key));
+  document.querySelectorAll('.pin-btn').forEach(b => setPinButton(b, keys.has(b.dataset.pin)));
   noteStatus.textContent = note ? `更新於 ${new Date(note.updated).toLocaleDateString('zh-TW')}` : '';
 }
 
@@ -718,17 +807,18 @@ async function saveNote() {
   const taxon = noteTaxon;
   const text = noteText.value.trim();
   const target = noteTarget;
+  const pins = notePins;
   if (!taxon) return;
   const key = noteKey(taxon);
   try {
-    if (!text && !target) {
+    if (!text && !target && !pins.length) {
       state.notes.delete(key);
       await deleteNote(key);
       await markDeleted('note', key);
       noteStatus.textContent = '';
       return;
     }
-    const note = { key, taxon, target, text, updated: new Date().toISOString() };
+    const note = { key, taxon, target, text, pins, updated: new Date().toISOString() };
     state.notes.set(key, note);
     await putNote(note);
     noteStatus.textContent = '已儲存';

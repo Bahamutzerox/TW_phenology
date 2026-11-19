@@ -69,6 +69,20 @@ function isValidNote(n) {
   return n && typeof n.taxon === 'string' && n.taxon && TARGETS.has(n.target ?? '');
 }
 
+// Records saved into a note: keep only well-formed entries with http(s) links
+function cleanPins(pins) {
+  if (!Array.isArray(pins)) return [];
+  return pins.filter(p => p && typeof p.key === 'string' && /^https?:\/\//.test(p.url || ''))
+    .map(p => ({
+      key: p.key, source: p.source === 'inat' ? 'inat' : 'gbif',
+      date: String(p.date ?? ''), month: Number(p.month) || 0,
+      place: String(p.place ?? ''), recorded_by: String(p.recorded_by ?? ''),
+      lat: typeof p.lat === 'number' ? p.lat : null, lng: typeof p.lng === 'number' ? p.lng : null,
+      url: p.url, photo_url: /^https?:\/\//.test(p.photo_url || '') ? p.photo_url : null,
+      added: String(p.added ?? ''),
+    }));
+}
+
 function isValidTombstone(t) {
   return t && KINDS.has(t.kind) && typeof t.key === 'string' && t.key && typeof t.deleted_at === 'string';
 }
@@ -153,7 +167,7 @@ export async function mergeSnapshot(data) {
     if (deletedAt('note', key) >= updated) continue;
     const cur = localNotes.get(key);
     if (cur && (cur.updated || '') >= updated) continue;
-    await putNote({ key, taxon: n.taxon, target: n.target || '', text: String(n.text || ''), updated: updated || new Date().toISOString() });
+    await putNote({ key, taxon: n.taxon, target: n.target || '', text: String(n.text || ''), pins: cleanPins(n.pins), updated: updated || new Date().toISOString() });
     result.notes++;
   }
 

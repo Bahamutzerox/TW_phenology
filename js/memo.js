@@ -116,6 +116,7 @@ export function renderMemo(container, items, { month = 0, onLoad, onDelete } = {
     const common = [entry.taxon_common, entry.taxon_group && entry.taxon_group !== 'angio' ? groupInfo(entry.taxon_group).name : '']
       .filter(Boolean).join(' · ');
     if (common) name.appendChild(div('memo-common', common));
+    if (note?.pins?.length) name.appendChild(div('memo-pins', `已存 ${note.pins.length} 筆記錄`));
     if (note?.text) {
       const n = div('memo-note', note.text.replace(/\s+/g, ' '));
       n.title = note.text;
