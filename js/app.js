@@ -115,7 +115,7 @@ function showAC(taxa) {
 const RANK_ZH = {
   variety: '變種', subspecies: '亞種', species: '種', hybrid: '雜交種', section: '節', subgenus: '亞屬', genus: '屬',
   subtribe: '亞族', tribe: '族', subfamily: '亞科', family: '科', superfamily: '總科',
-  suborder: '亞目', order: '目', superorder: '總目', subclass: '亞綱', class: '綱',
+  suborder: '亞目', order: '目', superorder: '總目', subclass: '亞綱', class: '綱', subphylum: '亞門', phylum: '門', kingdom: '界',
 };
 
 function hideAC() { acList.hidden = true; acList.innerHTML = ''; }

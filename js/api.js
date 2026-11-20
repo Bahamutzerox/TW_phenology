@@ -3,8 +3,8 @@ import { parseINatAnnotations, parseReproductiveCondition, plantGroup } from './
 const INAT_BASE = 'https://api.inaturalist.org/v1';
 const GBIF_BASE = 'https://api.gbif.org/v1';
 
-// Infraspecific taxa up to class (e.g. 秋海棠科, 蘭目, 木賊綱)
-const SEARCH_RANKS = 'variety,subspecies,species,hybrid,section,subgenus,genus,subtribe,tribe,subfamily,family,superfamily,suborder,order,superorder,subclass,class';
+// Infraspecific taxa up to kingdom (e.g. 秋海棠科, 單子葉植物綱, 被子植物)
+const SEARCH_RANKS = 'variety,subspecies,species,hybrid,section,subgenus,genus,subtribe,tribe,subfamily,family,superfamily,suborder,order,superorder,subclass,class,subphylum,phylum,kingdom';
 
 export async function searchTaxa(query) {
   // autocomplete ranks exact name matches first; /taxa?order_by=observations_count buried
@@ -21,8 +21,8 @@ export async function searchTaxa(query) {
     common_name: /[㐀-鿿]/.test(t.preferred_common_name || '') ? t.preferred_common_name
       : /[㐀-鿿]/.test(t.matched_term || '') ? t.matched_term : (t.preferred_common_name || ''),
     matched_term: t.matched_term || '',
-    // The name the user typed, when iNat files it as a synonym (e.g. 昭和草 → 野茼蒿)
-    alias: _sameName(t.matched_term, query) && !_sameName(t.matched_term, t.preferred_common_name) ? t.matched_term : '',
+    // The name the user typed, when iNat files it under another name (昭和草 → 野茼蒿, 單子葉植物綱 → 百合綱)
+    alias: _norm(t.matched_term).startsWith(_norm(query)) && /[㐀-鿿]/.test(query) && !_sameName(t.matched_term, t.preferred_common_name) ? t.matched_term : '',
     photo_url: t.default_photo?.square_url || null,
     observations_count: t.observations_count || 0,
     group: plantGroup(t.ancestor_ids, t.id),
@@ -133,7 +133,13 @@ export async function fetchINatObservations(taxonId, onProgress, { taiwan = fals
   return records;
 }
 
+// iNat clades with no single GBIF backbone node: GBIF keys that together cover them
+const GBIF_EQUIVALENT = {
+  Angiospermae: [220, 196],   // Magnoliopsida + Liliopsida
+};
+
 export async function matchGBIFTaxon(name, rank) {
+  if (GBIF_EQUIVALENT[name]) return { usageKey: GBIF_EQUIVALENT[name], species: name };
   const want = rank && rank !== 'hybrid' ? rank.toUpperCase() : '';   // GBIF files hybrids as SPECIES
   const rankParam = want ? `&rank=${want}` : '';
   const url = `${GBIF_BASE}/species/match?name=${encodeURIComponent(name)}&kingdom=Plantae${rankParam}`;
@@ -154,7 +160,7 @@ export async function fetchGBIFSpecimens(taxonKey, onProgress, { taiwan = false 
 
   for (let page = 0; page < MAX_PAGES; page++) {
     const offset = page * 300;
-    const url = `${GBIF_BASE}/occurrence/search?taxonKey=${taxonKey}&basisOfRecord=PRESERVED_SPECIMEN&hasCoordinate=true${countryParam}&limit=300&offset=${offset}`;
+    const url = `${GBIF_BASE}/occurrence/search?taxonKey=${[].concat(taxonKey).join('&taxonKey=')}&basisOfRecord=PRESERVED_SPECIMEN&hasCoordinate=true${countryParam}&limit=300&offset=${offset}`;
     const res = await fetch(url);
     if (!res.ok) break;
     const data = await res.json();
