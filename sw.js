@@ -1,4 +1,4 @@
-const CACHE = 'flowering-time-v24';
+const CACHE = 'flowering-time-v25';
 
 const PRECACHE = [
   './',

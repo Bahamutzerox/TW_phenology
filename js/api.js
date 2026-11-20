@@ -3,10 +3,13 @@ import { parseINatAnnotations, parseReproductiveCondition, plantGroup } from './
 const INAT_BASE = 'https://api.inaturalist.org/v1';
 const GBIF_BASE = 'https://api.gbif.org/v1';
 
+// Infraspecific taxa up to class (e.g. 秋海棠科, 蘭目, 木賊綱)
+const SEARCH_RANKS = 'variety,subspecies,species,hybrid,section,subgenus,genus,subtribe,tribe,subfamily,family,superfamily,suborder,order,superorder,subclass,class';
+
 export async function searchTaxa(query) {
   // autocomplete ranks exact name matches first; /taxa?order_by=observations_count buried
   // rare species (e.g. 山芫荽) under popular taxa. taxon_id 47126 = Plantae.
-  const url = `${INAT_BASE}/taxa/autocomplete?q=${encodeURIComponent(query)}&taxon_id=47126&rank=species,subspecies,variety,genus&per_page=10&locale=zh-TW`;
+  const url = `${INAT_BASE}/taxa/autocomplete?q=${encodeURIComponent(query)}&taxon_id=47126&rank=${SEARCH_RANKS}&per_page=10&locale=zh-TW`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`iNat taxa search failed: ${res.status}`);
   const data = await res.json();
@@ -130,13 +133,18 @@ export async function fetchINatObservations(taxonId, onProgress, { taiwan = fals
   return records;
 }
 
-export async function matchGBIFTaxon(name) {
-  const url = `${GBIF_BASE}/species/match?name=${encodeURIComponent(name)}`;
+export async function matchGBIFTaxon(name, rank) {
+  const want = rank && rank !== 'hybrid' ? rank.toUpperCase() : '';   // GBIF files hybrids as SPECIES
+  const rankParam = want ? `&rank=${want}` : '';
+  const url = `${GBIF_BASE}/species/match?name=${encodeURIComponent(name)}&kingdom=Plantae${rankParam}`;
   const res = await fetch(url);
   if (!res.ok) return null;
   const data = await res.json();
-  if (data.matchType === 'NONE' || !data.usageKey) return null;
-  return { usageKey: data.usageKey, species: data.species || data.canonicalName || name };
+  // HIGHERRANK means GBIF only knows a parent taxon: its specimens would be the wrong taxon
+  if (data.matchType === 'NONE' || data.matchType === 'HIGHERRANK' || !data.usageKey) return null;
+  // Higher ranks differ between iNat and GBIF (e.g. a section matched to a genus): skip rather than show the wrong taxon
+  if (want && data.rank !== want) return null;
+  return { usageKey: data.acceptedUsageKey || data.usageKey, species: data.species || data.canonicalName || name };
 }
 
 export async function fetchGBIFSpecimens(taxonKey, onProgress, { taiwan = false } = {}) {

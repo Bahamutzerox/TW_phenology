@@ -103,12 +103,20 @@ function showAC(taxa) {
       common.textContent = t.alias ? `${t.common_name}（${t.alias}）` : t.common_name;
       info.appendChild(common);
     }
+    const rank = RANK_ZH[t.rank];
+    if (rank && t.rank !== 'species') sci.appendChild(span('ac-rank', rank));
     li.appendChild(info);
     li.addEventListener('click', () => { searchInput.value = t.name; hideAC(); runSearch(t); });
     acList.appendChild(li);
   }
   acList.hidden = false;
 }
+
+const RANK_ZH = {
+  variety: '變種', subspecies: '亞種', species: '種', hybrid: '雜交種', section: '節', subgenus: '亞屬', genus: '屬',
+  subtribe: '亞族', tribe: '族', subfamily: '亞科', family: '科', superfamily: '總科',
+  suborder: '亞目', order: '目', superorder: '總目', subclass: '亞綱', class: '綱',
+};
 
 function hideAC() { acList.hidden = true; acList.innerHTML = ''; }
 
@@ -147,7 +155,7 @@ async function runSearch(taxon) {
             .then(data => { state.inatRecords = data; tick('iNaturalist 觀察記錄已載入'); })
         : Promise.resolve(),
       useGBIF
-        ? matchGBIFTaxon(taxon.name).then(async match => {
+        ? matchGBIFTaxon(taxon.name, taxon.rank).then(async match => {
             if (match) {
               taxon.gbif_key    = match.usageKey;
               state.gbifRecords = await fetchGBIFSpecimens(match.usageKey, undefined, { taiwan: useTaiwan });

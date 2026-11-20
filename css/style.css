@@ -1039,3 +1039,9 @@ body {
 .note-pin-del { font: inherit; font-size: .7rem; padding: 2px 6px; border: none; background: none; color: var(--text-muted); cursor: pointer; }
 .note-pin-del:hover { color: #c0392b; }
 .memo-pins { font-size: .7rem; color: var(--brand); margin-top: 2px; }
+
+.ac-rank {
+  margin-left: 6px; padding: 0 6px; border-radius: 999px; font-style: normal;
+  font-size: .68rem; font-weight: 600; color: var(--text-muted); border: 1px solid var(--border);
+  vertical-align: 1px;
+}
