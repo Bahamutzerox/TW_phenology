@@ -1060,3 +1060,8 @@ body {
 .map-drawing, .map-drawing .leaflet-interactive { cursor: crosshair !important; }
 .stat-chip .of { opacity: .65; font-weight: 400; }
 .memo-region { font-size: .7rem; color: var(--text-muted); margin-top: 2px; }
+
+/* Record picked to show on the map */
+.record-card.locatable { cursor: pointer; }
+.record-card.record-selected { background: #e9f3ed; box-shadow: inset 3px 0 0 var(--brand); }
+.grid-item.record-selected { outline: 3px solid var(--brand); outline-offset: 2px; }

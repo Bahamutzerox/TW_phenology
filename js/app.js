@@ -1,6 +1,6 @@
 import { searchTaxa, fetchINatObservations, matchGBIFTaxon, fetchGBIFSpecimens, fetchTaxonGroups } from './api.js';
 import { renderTimeline, renderMonthDetail } from './timeline.js';
-import { renderMap, setMapRegion, startDraw, cancelDraw, finishDraw, fitRegion } from './map.js';
+import { renderMap, setMapRegion, startDraw, cancelDraw, finishDraw, fitRegion, focusRecord } from './map.js';
 import { pointInRegion, filterRegion } from './region.js';
 import {
   saveSearch, listSearches, deleteSearch, listAnnotations, listNotes, putNote, deleteNote,
@@ -425,7 +425,30 @@ function createGridItem(r) {
   if (loc) overlay.appendChild(span('grid-loc', loc));
   a.appendChild(overlay);
   a.appendChild(pinButton(r, 'grid-pin'));
+  if (hasCoords(r)) {
+    a.title = '在地圖上顯示（Ctrl／⌘ 點擊開啟原始記錄）';
+    a.addEventListener('click', e => {
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;   // new tab still works
+      e.preventDefault();
+      showOnMap(r, a);
+    });
+  } else {
+    a.title = '沒有公開座標（稀有物種在 iNat 會模糊化），點擊開啟原始記錄';
+  }
   return a;
+}
+
+const hasCoords = r => r.lat != null && r.lng != null && !(r.lat === 0 && r.lng === 0);
+
+function showOnMap(r, el) {
+  document.querySelectorAll('.record-selected').forEach(x => x.classList.remove('record-selected'));
+  el.classList.add('record-selected');
+  // Phones stack the map above the records; desktop keeps it in the sticky column
+  const box = $('map-container').getBoundingClientRect();
+  if (box.top < 0 || box.bottom > innerHeight) {
+    $('map-container').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+  focusRecord(r);
 }
 
 function span(cls, text) {
@@ -626,6 +649,14 @@ function createRecordCard(r) {
   link.textContent = '查看';
   card.appendChild(pinButton(r, 'record-pin'));
   card.appendChild(link);
+  if (hasCoords(r)) {
+    card.classList.add('locatable');
+    card.title = '在地圖上顯示';
+    card.addEventListener('click', e => {
+      if (e.target.closest('a, button')) return;
+      showOnMap(r, card);
+    });
+  }
   return card;
 }
 

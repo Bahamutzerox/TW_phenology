@@ -5,6 +5,7 @@ let _points = [];        // [{ marker, lat, lng }] for region styling
 let _region = null;
 let _regionLayer = null;
 let _draw = null;        // drawing in progress
+let _highlight = null;   // ring around the record picked from the list
 
 const BRAND = '#2d6a4f';
 
@@ -43,31 +44,25 @@ export function renderMap(containerId, inatRecords, gbifRecords) {
     const marker = L.circleMarker([r.lat, r.lng], {
       radius: 5, color: '#e76f51', fillColor: '#e76f51', fillOpacity: 0.65, weight: 1,
     });
-    marker.bindPopup(() => _popup('iNaturalist', '#e76f51', [
-      ['日期', r.observed_on || '—'],
-      ['地點', r.place || '—'],
-    ], r.url), { maxWidth: 240 });
+    marker.bindPopup(() => _recordPopup(r), { maxWidth: 240 });
     _markers.addLayer(marker);
-    _points.push({ marker, lat: r.lat, lng: r.lng });
+    _points.push({ marker, lat: r.lat, lng: r.lng, url: r.url });
     bounds.push([r.lat, r.lng]);
   }
 
   for (const r of gbifSample) {
     if (!r.lat || !r.lng) continue;
-    const date = r.year ? `${r.year}-${String(r.month).padStart(2, '0')}` : `${r.month}月`;
     const marker = L.circleMarker([r.lat, r.lng], {
       radius: 5, color: '#4361ee', fillColor: '#4361ee', fillOpacity: 0.65, weight: 1,
     });
-    marker.bindPopup(() => _popup('GBIF 標本', '#4361ee', [
-      ['日期', date],
-      ['典藏', r.institution || r.dataset || '—'],
-      ['採集者', r.recorded_by || '—'],
-    ], r.url), { maxWidth: 240 });
+    marker.bindPopup(() => _recordPopup(r), { maxWidth: 240 });
     _markers.addLayer(marker);
-    _points.push({ marker, lat: r.lat, lng: r.lng });
+    _points.push({ marker, lat: r.lat, lng: r.lng, url: r.url });
     bounds.push([r.lat, r.lng]);
   }
   _styleMarkers();
+  _highlight?.remove();
+  _highlight = null;
 
   // Always focus on Taiwan: records abroad (non-endemic species, wrong
   // specimen coordinates) stay on the map but never drive the zoom
@@ -171,6 +166,34 @@ function _drawPreview(cursor) {
 
 export function invalidateMap() {
   if (_map) setTimeout(() => _map.invalidateSize(), 150);
+}
+
+function _recordPopup(r) {
+  if (r.source === 'inat') {
+    return _popup('iNaturalist', '#e76f51', [['日期', r.observed_on || '—'], ['地點', r.place || '—']], r.url);
+  }
+  const date = r.year ? `${r.year}-${String(r.month).padStart(2, '0')}${r.day ? '-' + String(r.day).padStart(2, '0') : ''}` : `${r.month}月`;
+  return _popup('GBIF 標本', '#4361ee', [
+    ['日期', date],
+    ['典藏', r.institution || r.dataset || '—'],
+    ['採集者', r.recorded_by || '—'],
+  ], r.url);
+}
+
+// Show one record from the list: zoom in, ring it and open its popup.
+// Works for records left out of the sampled markers too.
+export function focusRecord(r) {
+  if (!_map || r.lat == null || r.lng == null) return false;
+  const ll = [r.lat, r.lng];
+  _highlight?.remove();
+  _highlight = L.circleMarker(ll, {
+    radius: 11, color: '#1b1b1b', weight: 2.5, fill: false, interactive: false,
+  }).addTo(_map);
+  _map.setView(ll, Math.max(_map.getZoom(), 12));
+  const existing = _points.find(p => p.url === r.url);
+  if (existing) existing.marker.openPopup();
+  else L.popup({ maxWidth: 240 }).setLatLng(ll).setContent(_recordPopup(r)).openOn(_map);
+  return true;
 }
 
 function _popup(title, color, rows, url) {
