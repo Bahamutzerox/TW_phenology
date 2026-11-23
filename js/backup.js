@@ -1,3 +1,4 @@
+import { cleanRegion } from './region.js';
 import {
   listSearches, saveSearch, deleteSearch,
   listAnnotations, putAnnotation, deleteAnnotation,
@@ -167,7 +168,7 @@ export async function mergeSnapshot(data) {
     if (deletedAt('note', key) >= updated) continue;
     const cur = localNotes.get(key);
     if (cur && (cur.updated || '') >= updated) continue;
-    await putNote({ key, taxon: n.taxon, target: n.target || '', text: String(n.text || ''), pins: cleanPins(n.pins), updated: updated || new Date().toISOString() });
+    await putNote({ key, taxon: n.taxon, target: n.target || '', text: String(n.text || ''), pins: cleanPins(n.pins), region: cleanRegion(n.region), updated: updated || new Date().toISOString() });
     result.notes++;
   }
 

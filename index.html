@@ -152,6 +152,22 @@
               <span class="legend-dot gbif"></span>GBIF
             </div>
           </div>
+          <div class="map-tools">
+            <div id="region-idle" class="map-tools-row">
+              <span class="note-label">範圍</span>
+              <button id="draw-rect-btn" class="map-tool-btn" type="button">框選</button>
+              <button id="draw-poly-btn" class="map-tool-btn" type="button">多邊形</button>
+              <button id="region-fit-btn" class="map-tool-btn" type="button" hidden>移到範圍</button>
+              <button id="region-clear-btn" class="map-tool-btn danger" type="button" hidden>清除範圍</button>
+              <span id="region-info" class="region-info"></span>
+            </div>
+            <div id="region-drawing" class="map-tools-row" hidden>
+              <span class="note-label">畫範圍</span>
+              <button id="draw-done-btn" class="map-tool-btn primary" type="button" hidden>完成</button>
+              <button id="draw-cancel-btn" class="map-tool-btn" type="button">取消</button>
+              <span id="draw-hint" class="region-info"></span>
+            </div>
+          </div>
           <div id="map-container" class="map-container"></div>
         </div>
       </div>

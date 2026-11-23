@@ -1,6 +1,7 @@
 import { searchTaxa, fetchINatObservations, matchGBIFTaxon, fetchGBIFSpecimens, fetchTaxonGroups } from './api.js';
 import { renderTimeline, renderMonthDetail } from './timeline.js';
-import { renderMap } from './map.js';
+import { renderMap, setMapRegion, startDraw, cancelDraw, finishDraw, fitRegion } from './map.js';
+import { pointInRegion, filterRegion } from './region.js';
 import {
   saveSearch, listSearches, deleteSearch, listAnnotations, listNotes, putNote, deleteNote,
   noteKey, taxonKey, markDeleted,
@@ -177,6 +178,9 @@ async function runSearch(taxon) {
 }
 
 function setTaxonCard(taxon) {
+  // Region comes from the species note; showNoteEditor re-checks once notes load
+  stopDrawing();
+  state.region = state.notes.get(noteKey(taxon.name))?.region || null;
   taxonSci.textContent    = taxon.name;
   taxonCommon.textContent = taxon.common_name
     || (taxon.matched_term && taxon.matched_term !== taxon.name ? taxon.matched_term : '');
@@ -216,11 +220,27 @@ function applyGroup() {
   }
 }
 
+// Records inside the drawn region (all records when no region)
+const regionInat = () => filterRegion(state.inatRecords, state.region);
+const regionGbif = () => filterRegion(state.gbifRecords, state.region);
+
 function buildAllRecords() {
-  const records = [...state.inatRecords, ...state.gbifRecords];
+  const records = [...regionInat(), ...regionGbif()];
   records.sort((a, b) => a.month - b.month || (b.year || 0) - (a.year || 0));
   state.allRecords  = records;
   state.recordOffset = 0;
+}
+
+function drawStats() {
+  statsRow.innerHTML = '';
+  const chip = (cls, name, part, all) => {
+    const c = span(`stat-chip ${cls}`, `${name} ${part.length} `);
+    if (state.region) c.appendChild(span('of', `/ ${all.length} `));
+    c.append('筆');
+    statsRow.appendChild(c);
+  };
+  chip('inat', 'iNat', regionInat(), state.inatRecords);
+  chip('specimen', '標本', regionGbif(), state.gbifRecords);
 }
 
 function refreshUI() {
@@ -230,11 +250,7 @@ function refreshUI() {
   memoView.hidden   = true;
   savedBtn.classList.remove('active');
 
-  // Stats
-  statsRow.innerHTML = [
-    `<span class="stat-chip inat">iNat ${state.inatRecords.length} 筆</span>`,
-    `<span class="stat-chip specimen">標本 ${state.gbifRecords.length} 筆</span>`,
-  ].join('');
+  drawStats();
 
   // Hide month detail on new search
   state.detailMonth = 0;
@@ -247,6 +263,8 @@ function refreshUI() {
 
   // Map (always render; re-render on new search)
   renderMap('map-container', state.inatRecords, state.gbifRecords);
+  setMapRegion(state.region, pointInRegion);
+  drawRegionTools();
   state.mapReady = true;
 
   renderRecordsList();
@@ -262,8 +280,8 @@ const MONTH_ZH = ['1月','2月','3月','4月','5月','6月','7月','8月','9月'
 
 function timelineSeries() {
   const type = typeFilter.value;
-  const inat = type === 'gbif' ? [] : state.inatRecords;
-  const gbif = type === 'inat' ? [] : state.gbifRecords;
+  const inat = type === 'gbif' ? [] : regionInat();
+  const gbif = type === 'inat' ? [] : regionGbif();
   if (state.curveMode === 'source') {
     return [
       { label: 'iNaturalist', color: '#52b788', fill: 'rgba(82,183,136,0.45)', records: inat },
@@ -283,7 +301,7 @@ function drawTimeline() {
     timelineHint.textContent = '點擊月份可過濾下方記錄，並放大該月日期分布';
     return;
   }
-  const all = [...state.inatRecords, ...state.gbifRecords];
+  const all = [...regionInat(), ...regionGbif()];
   let judged = 0, mine = 0;
   for (const r of all) {
     const e = effectivePheno(r, state.annotations);
@@ -319,7 +337,7 @@ function handleTimelineClick(month) {
 function startAnnotating() {
   if (!state.currentTaxon) return;
   openAnnotator({
-    records:     [...state.inatRecords, ...state.gbifRecords],
+    records:     [...regionInat(), ...regionGbif()],
     annotations: state.annotations,
     taxonName:   state.currentTaxon.name,
     group:       curGroup(),
@@ -429,6 +447,73 @@ function phenoChips(r) {
   }
   return wrap;
 }
+
+// ── Region drawn on the map ──────────────────────────────────────────────────
+const regionIdle    = $('region-idle');
+const regionDrawing = $('region-drawing');
+const drawHint      = $('draw-hint');
+const drawDoneBtn   = $('draw-done-btn');
+
+function drawRegionTools() {
+  const has = !!state.region;
+  $('region-clear-btn').hidden = !has;
+  $('region-fit-btn').hidden = !has;
+  const all = state.inatRecords.length + state.gbifRecords.length;
+  const inside = regionInat().length + regionGbif().length;
+  $('region-info').textContent = has
+    ? `範圍內 ${inside} / ${all} 筆，時間軸與記錄只計範圍內`
+    : '在地圖上畫出範圍，只看該地區的花果期';
+}
+
+// Apply a region: redraw everything that counts records; save it with the note
+function applyRegion(region, { save = true } = {}) {
+  state.region = region;
+  state.recordOffset = 0;
+  buildAllRecords();
+  drawStats();
+  drawTimeline();
+  drawMonthDetail();
+  renderRecordsList();
+  setMapRegion(region, pointInRegion);
+  drawRegionTools();
+  if (save && noteTaxon) {
+    noteRegion = region;
+    clearTimeout(noteTimer);
+    saveNote();
+  }
+}
+
+function beginDrawing(kind) {
+  if (!state.currentTaxon) return;
+  regionIdle.hidden = true;
+  regionDrawing.hidden = false;
+  drawDoneBtn.hidden = true;
+  drawHint.textContent = kind === 'rect' ? '點選範圍的一角，再點對角' : '依序點選範圍的頂點';
+  startDraw(kind, {
+    onChange: n => {
+      if (kind === 'rect') { drawHint.textContent = '再點對角完成'; return; }
+      drawDoneBtn.hidden = n < 3;
+      drawHint.textContent = n < 3 ? `已點 ${n} 個頂點，至少需要 3 個` : `已點 ${n} 個頂點，點第一個點或按「完成」`;
+    },
+    onDone: region => { stopDrawing(); applyRegion(region); },
+  });
+}
+
+function stopDrawing() {
+  cancelDraw();
+  regionIdle.hidden = false;
+  regionDrawing.hidden = true;
+}
+
+$('draw-rect-btn').addEventListener('click', () => beginDrawing('rect'));
+$('draw-poly-btn').addEventListener('click', () => beginDrawing('poly'));
+$('draw-cancel-btn').addEventListener('click', stopDrawing);
+drawDoneBtn.addEventListener('click', () => finishDraw());
+$('region-fit-btn').addEventListener('click', () => fitRegion(state.region));
+$('region-clear-btn').addEventListener('click', () => applyRegion(null));
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && !regionDrawing.hidden) stopDrawing();
+});
 
 // ── Records saved into the species note ──────────────────────────────────────
 function pinButton(r, cls) {
@@ -624,7 +709,7 @@ function drawMemo() {
     return {
       ...it,
       note,
-      profile: monthlyProfile(it.entry, m, state.annotations),
+      profile: monthlyProfile(it.entry, m, state.annotations, note?.region),
       color: mode === 'target' && target ? TARGET_COLOR[target] : null,
     };
   });
@@ -776,6 +861,7 @@ const noteStatus = $('note-status');
 const noteSeg    = $('note-target');
 let noteTarget = '';
 let notePins   = [];
+let noteRegion = null;
 let noteTimer  = null;
 let noteTaxon  = null;   // species the editor is showing, may lag state.currentTaxon
 
@@ -802,6 +888,11 @@ async function showNoteEditor() {
   noteTarget = note?.target || '';
   noteText.value = note?.text || '';
   notePins = Array.isArray(note?.pins) ? note.pins : [];
+  noteRegion = note?.region || null;
+  // Notes may load (or sync in) after the records were drawn
+  if (state.currentTaxon && JSON.stringify(noteRegion) !== JSON.stringify(state.region)) {
+    applyRegion(noteRegion, { save: false });
+  }
   setSeg(noteSeg, noteTarget);
   renderPins();
   // Records may have rendered before the note finished loading
@@ -816,17 +907,18 @@ async function saveNote() {
   const text = noteText.value.trim();
   const target = noteTarget;
   const pins = notePins;
+  const region = noteRegion;
   if (!taxon) return;
   const key = noteKey(taxon);
   try {
-    if (!text && !target && !pins.length) {
+    if (!text && !target && !pins.length && !region) {
       state.notes.delete(key);
       await deleteNote(key);
       await markDeleted('note', key);
       noteStatus.textContent = '';
       return;
     }
-    const note = { key, taxon, target, text, pins, updated: new Date().toISOString() };
+    const note = { key, taxon, target, text, pins, region, updated: new Date().toISOString() };
     state.notes.set(key, note);
     await putNote(note);
     noteStatus.textContent = '已儲存';

@@ -1,4 +1,5 @@
 import { hasPheno, groupInfo } from './pheno.js';
+import { filterRegion } from './region.js';
 
 const PEAK_THRESHOLD = 0.5;
 const DIM_THRESHOLD  = 0.25;
@@ -18,9 +19,9 @@ export function normalizeInatRecords(raw) {
 }
 
 // mode: 'all' | 'flower' | 'fruit' | 'both' (flower or fruit)
-export function monthlyProfile(entry, mode = 'all', annotations = new Map()) {
+export function monthlyProfile(entry, mode = 'all', annotations = new Map(), region = null) {
   const counts = new Array(12).fill(0);
-  const all = [...normalizeInatRecords(entry.inat_records), ...(entry.gbif_records || [])];
+  const all = filterRegion([...normalizeInatRecords(entry.inat_records), ...(entry.gbif_records || [])], region);
   const recs = mode === 'all' ? all
     : mode === 'both' ? all.filter(r => hasPheno(r, annotations, 'flower') || hasPheno(r, annotations, 'fruit'))
     : all.filter(r => hasPheno(r, annotations, mode));
@@ -117,6 +118,7 @@ export function renderMemo(container, items, { month = 0, onLoad, onDelete } = {
       .filter(Boolean).join(' · ');
     if (common) name.appendChild(div('memo-common', common));
     if (note?.pins?.length) name.appendChild(div('memo-pins', `已存 ${note.pins.length} 筆記錄`));
+    if (note?.region) name.appendChild(div('memo-region', '限定地圖範圍'));
     if (note?.text) {
       const n = div('memo-note', note.text.replace(/\s+/g, ' '));
       n.title = note.text;

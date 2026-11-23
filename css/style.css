@@ -286,8 +286,7 @@ body {
   align-items: center;
 }
 .stat-chip {
-  display: inline-flex;
-  align-items: center;
+  display: inline-block;
   padding: 3px 10px;
   border-radius: 20px;
   font-size: .78rem;
@@ -1045,3 +1044,19 @@ body {
   font-size: .68rem; font-weight: 600; color: var(--text-muted); border: 1px solid var(--border);
   vertical-align: 1px;
 }
+
+/* Region drawing on the map */
+.map-tools { padding: 8px 14px; border-bottom: 1px solid var(--border); }
+.map-tools-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-height: 28px; }
+.map-tool-btn {
+  font: inherit; font-size: .75rem; padding: 3px 10px; cursor: pointer;
+  border: 1px solid var(--border); border-radius: 6px; background: #fff; color: var(--text);
+}
+.map-tool-btn:hover { color: var(--brand); border-color: var(--brand-light); }
+.map-tool-btn.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
+.map-tool-btn.danger:hover { color: #c0392b; border-color: #e3a49c; }
+/* Always its own line so idle and drawing toolbars keep the same height (the map must not jump mid-drawing) */
+.region-info { flex-basis: 100%; font-size: .74rem; color: var(--text-muted); min-height: 1.2em; }
+.map-drawing, .map-drawing .leaflet-interactive { cursor: crosshair !important; }
+.stat-chip .of { opacity: .65; font-weight: 400; }
+.memo-region { font-size: .7rem; color: var(--text-muted); margin-top: 2px; }
